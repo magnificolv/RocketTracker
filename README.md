@@ -19,15 +19,15 @@ Track your Rocket League matches automatically. Stats, history, deep analytics �
 
 ## 🖥️ Screenshots
 
-| Active Session | Deep Stats |
-|---------------|------------|
-| ![Active Session](screenshots/01-active-session.png) | ![Deep Stats](screenshots/02-stats.png) |
+| Active Session | History |
+|---------------|---------|
+| ![Active Session](screenshots/01-active-session.png) | ![History](screenshots/03-history.png) |
 
-| History | Stats Overview |
-|---------|---------------|
-| ![History](screenshots/03-history.png) | ![Stats](screenshots/02-stats.png) |
+| Stats Overview | Session Deep Stats |
+|---------------|-------------------|
+| ![Stats Overview](screenshots/02-stats.png) | *Coming soon — click any session in History to see its deep stats* |
 
-> *Live match tracking · Deep analytics · Session history · Win rate & recent form*
+> *Active Session tab: live match scores + per-match deep stats · History: browse past sessions · Stats: aggregate analytics · Session Deep Stats: per-session breakdown*
 
 ---
 
