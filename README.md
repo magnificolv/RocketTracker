@@ -19,9 +19,15 @@ Track your Rocket League matches automatically. Stats, history, deep analytics �
 
 ## 🖥️ Screenshots
 
-| Dashboard | Stats |
-|-----------|-------|
-| *Live match tracking with green status dot* | *Deep analytics across all matches* |
+| Active Session | Deep Stats |
+|---------------|------------|
+| ![Active Session](screenshots/01-active-session.png) | ![Deep Stats](screenshots/02-stats.png) |
+
+| History | Stats Overview |
+|---------|---------------|
+| ![History](screenshots/03-history.png) | ![Stats](screenshots/02-stats.png) |
+
+> *Live match tracking · Deep analytics · Session history · Win rate & recent form*
 
 ---
 
