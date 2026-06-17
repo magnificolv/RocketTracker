@@ -28,7 +28,9 @@ Track your Rocket League matches automatically. Stats, history, deep analytics �
 ## 📦 Installation
 
 ### 1. Download
-Get the latest `RL-Tracker-v1.0.exe` from [Releases](https://github.com/magnificolv/RocketTracker/releases).
+Get the latest `RL-Tracker-v1.0.exe` from **[Releases](https://github.com/magnificolv/RocketTracker/releases)**.
+
+[![Download v1.0](https://img.shields.io/badge/Download-v1.0-orange?style=for-the-badge)](https://github.com/magnificolv/RocketTracker/releases/download/v1.0/RL-Tracker-v1.0.exe)
 
 ### 2. Run
 Double-click `RL-Tracker-v1.0.exe`. A console window opens — **keep it running**.
