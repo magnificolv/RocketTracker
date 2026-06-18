@@ -81,15 +81,7 @@ The tracker auto-connects. Status dot turns 🟢 green when tracking is live. Pl
 
 ---
 
-## 🛡️ Windows Defender / SmartScreen
-
-> **"Virus detected" vai fails tiek izdzēsts?** Tas ir **false positive** — `RL-Tracker.exe` ir tīrs. Windows Defender karotī neparakstītas `.exe` programmas.
-
-**Kā salabot:**
-1. **Chromium pārlūkos** (Chrome/Edge/Brave): download pogai blakus → `···` → **"Keep"** vai **"Keep anyway"**
-2. **Windows Defender izdzēsa failu?** Atver Windows Security → Protection history → atjauno bloķēto failu
-3. **Pievieno izņēmumu:** Windows Security → Virus & threat protection → Manage settings → Exclusions → Add folder `C:\Users\%USERNAME%\Desktop\RL-Tracker-Release-v1.0`
-4. **Alternatīvi:** izmanto citu pārlūku (Firefox mazāk agresīvi bloķē `.exe` failus)
+## 🔧 Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
