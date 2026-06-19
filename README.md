@@ -1,21 +1,44 @@
-# 🚀 Rocket League Match Tracker v1.0.4
+<div align="center">
+  <img src="icon.png" width="120" alt="RocketTracker logo"><br>
+  <h1>🚀 RocketTracker</h1>
+  <p><strong>Auto-track every Rocket League match — no install, no Python, no WSL.</strong></p>
+</div>
 
 <p align="center">
-  <img src="icon.png" width="96" alt="RL Tracker logo"><br>
-  <strong>Auto-track your Rocket League matches. No install, no Python, no WSL.</strong>
-</p>
-
-<p align="center">
-  <a href="https://github.com/magnificolv/RocketTracker/releases/tag/v1.0.3">
-    <img src="https://img.shields.io/badge/⬇️%20Download-v1.0.3%20ZIP-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.0.3 ZIP" height="40">
-  </a>
+  <a href="https://github.com/magnificolv/RocketTracker/releases/latest"><img src="https://img.shields.io/github/v/release/magnificolv/RocketTracker?style=flat-square&label=version&color=blue" alt="Version"></a>
   &nbsp;
-  <a href="https://github.com/magnificolv/RocketTracker/releases">
-    <img src="https://img.shields.io/badge/All%20Releases-Releases-blue?style=for-the-badge" alt="All Releases" height="40">
-  </a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
+  &nbsp;
+  <a href="https://github.com/magnificolv/RocketTracker/stargazers"><img src="https://img.shields.io/github/stars/magnificolv/RocketTracker?style=flat-square&color=yellow" alt="Stars"></a>
+  &nbsp;
+  <a href="https://github.com/magnificolv/RocketTracker/releases"><img src="https://img.shields.io/github/downloads/magnificolv/RocketTracker/total?style=flat-square&color=orange&label=downloads" alt="Downloads"></a>
+  &nbsp;
+  <a href="https://github.com/magnificolv/RocketTracker/commits/main"><img src="https://img.shields.io/github/last-commit/magnificolv/RocketTracker?style=flat-square&label=last%20commit" alt="Last commit"></a>
 </p>
 
-> 📦 **Download the ZIP, extract it to your Desktop, open the folder, and double‑click the .exe.** A console window opens, your browser opens the dashboard, and stats appear as you play. **Everything stays inside the folder — no scattered files.**
+---
+
+<div align="center">
+
+### 🎯 Track shots, boost, demos, assists & more — automatically, every match.
+
+<br>
+
+<a href="https://github.com/magnificolv/RocketTracker/releases/latest">
+  <img src="https://img.shields.io/badge/⬇️%20DOWNLOAD-v1.0.4%20ZIP-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.0.4 ZIP" height="62">
+</a>
+
+<br><br>
+
+<a href="https://github.com/magnificolv/RocketTracker/releases">
+  <img src="https://img.shields.io/badge/All%20Releases-Releases-9cf?style=for-the-badge" alt="All Releases" height="32">
+</a>
+
+<br>
+
+<sub>📦 Download · Extract to Desktop · Double-click the .exe · Play</sub>
+
+</div>
 
 ---
 
@@ -23,16 +46,16 @@
 
 <table>
 <tr>
-  <td width="50%"><b>🎮 Active Session</b><br><i>Live match scores, per-match deep stats</i></td>
-  <td width="50%"><b>📋 History</b><br><i>Browse past sessions, click to expand</i></td>
+  <td width="50%" align="center"><b>🎮 Active Session</b><br><sub>Live match scores & per-match deep stats</sub></td>
+  <td width="50%" align="center"><b>📋 History</b><br><sub>Browse past sessions, click to expand</sub></td>
 </tr>
 <tr>
   <td><img src="screenshots/01-active-session.png" alt="Active Session"></td>
   <td><img src="screenshots/03-history-sessions.png" alt="History"></td>
 </tr>
 <tr>
-  <td width="50%"><b>📊 Stats Overview</b><br><i>All-time analytics with deep breakdowns</i></td>
-  <td width="50%"><b>🔍 Session Deep Stats</b><br><i>Aggregate stats per completed session</i></td>
+  <td width="50%" align="center"><b>📊 Stats Overview</b><br><sub>All-time analytics with deep breakdowns</sub></td>
+  <td width="50%" align="center"><b>🔍 Session Deep Stats</b><br><sub>Aggregate stats per completed session</sub></td>
 </tr>
 <tr>
   <td><img src="screenshots/02-stats-overview.png" alt="Stats Overview"></td>
@@ -42,10 +65,10 @@
 
 ---
 
-## ✨ What It Tracks
+## ✨ Features
 
-| Category | Stats |
-|----------|-------|
+| Category | What it tracks |
+|:--------:|----------------|
 | 🎯 **Shot Power** | Fastest goal (km/h), avg shot power, shot accuracy %, total shots |
 | ⛽ **Movement** | Avg boost %, time boosting %, supersonic %, air time % |
 | 💥 **Combat** | Demos given, demos taken, saves, overtime matches |
@@ -57,31 +80,36 @@
 
 ## 🚀 Quick Start
 
-**1. Download** → [**RL-Tracker-v1.0.3.zip**](https://github.com/magnificolv/RocketTracker/releases/tag/v1.0.3) (13 MB)
-
-**2. Extract** → Right‑click the ZIP → **Extract All…** → Choose your **Desktop** (or anywhere convenient)
-
-**3. Open the folder** → `RL-Tracker\` → **double‑click** `RL-Tracker-v1.0.3.exe`
-
-**4. Enter your name** → ⚙️ Settings → type your Rocket League display name → **Save**
-
-**5. Launch Rocket League** → Play a match, stats appear automatically 🎉
+1. **Download** → [**RL-Tracker-v1.0.4.zip**](https://github.com/magnificolv/RocketTracker/releases/latest) (~13 MB)
+2. **Extract** → Right-click the ZIP → **Extract All…** → Choose your **Desktop**
+3. **Launch** → Open `RL-Tracker\` → double-click `RL-Tracker-v1.0.4.exe`
+4. **Play** → Enter your name in ⚙️ Settings → launch Rocket League → stats appear automatically 🎉
 
 > 💡 **First time?** Click **Auto-Create** in Settings to set up the Stats API config. Restart RL once.
 >
-> 💡 **Keep the folder together.** All data (`data.db`, `config.yaml`, logs) is saved **inside** the `RL-Tracker\` folder. Don't drag the .exe out.
+> 💡 **Keep the folder together.** All data (`data.db`, `config.yaml`, logs) stays **inside** `RL-Tracker\`. Don't drag the .exe out.
 
 ---
 
-## 🛡️ Windows Defender
+## 🛡️ Windows Defender (false positive)
 
-"Virus detected" ir **false positive** — fails nav parakstīts. Kā salabot:
+The .exe is unsigned, so Defender may flag it. This is a **false positive** — here's how to bypass it:
 
-| Problēma | Risinājums |
-|----------|-----------|
-| Chrome/Edge bloķē download | Pogas blakus `···` → **Keep anyway** |
-| Defender izdzēsa failu | Windows Security → Protection history → Atjaunot |
-| Pievienot izņēmumu | Windows Security → Exclusions → Add `C:\Users\%USERNAME%\Desktop\RL-Tracker` |
+| Problem | Fix |
+|---------|-----|
+| Chrome/Edge blocks download | Click `···` next to the warning → **Keep anyway** |
+| Defender deleted the file | Windows Security → Protection history → **Restore** |
+| Add a permanent exclusion | Windows Security → Exclusions → Add `C:\Users\%USERNAME%\Desktop\RL-Tracker` |
+
+---
+
+## 👥 For Friends
+
+1. **Download** the [ZIP](https://github.com/magnificolv/RocketTracker/releases/latest) and **extract** it to your Desktop
+2. **Double-click** `RL-Tracker-v1.0.4.exe` inside the `RL-Tracker\` folder, then enter YOUR Rocket League name in ⚙️ Settings
+3. Click **Auto-Create**, restart Rocket League, and play! 🎉
+
+> ⚠️ **Important:** Run the .exe **from inside the `RL-Tracker\` folder**. Moving it elsewhere scatters your data files.
 
 ---
 
@@ -91,29 +119,16 @@
 |------|---------|
 | `data.db` | All match data (persists between runs) |
 | `config.yaml` | Your player name & friends |
-| `listener.log` | Debug log (delete occasionally) |
+| `listener.log` | Debug log (safe to delete occasionally) |
 
-All files are created **inside the `RL-Tracker\` folder** automatically — nothing ends up on your Desktop or Downloads folder.
-
----
-
-## 🛠️ For Friends
-
-1. Download [**RL-Tracker-v1.0.3.zip**](https://github.com/magnificolv/RocketTracker/releases/tag/v1.0.3)
-2. **Extract the ZIP** to Desktop → you'll get an `RL-Tracker\` folder
-3. **Double‑click** `RL-Tracker-v1.0.3.exe` inside the folder
-4. Enter YOUR Rocket League name in ⚙️ Settings
-5. Click **Auto-Create** to set up the config
-6. Restart Rocket League, play!
-
-> ⚠️ **Important:** Run the .exe from **inside the `RL-Tracker\` folder**. If you move the .exe to another location, the data files will be created there instead.
+All files are created **inside the `RL-Tracker\` folder** automatically — nothing ends up on your Desktop or in Downloads.
 
 ---
 
 ## 📝 Version History
 
 | Version | Date | Changes |
-|---------|------|---------|
+|:-------:|:----:|---------|
 | **v1.0.4** | Jun 20 | GLM 5.2 code review: 17 fixes — dedup timestamp, false losses, GoalScored crash, tie validation, float rounding, ground/wall time display |
 | **v1.0.3** | Jun 19 | TAStatsAPI.ini section fix, duo re-check, Recent Form order, float rounding |
 | **v1.0.1** | Jun 18 | json_module crash fix, session deep stats, DB persistence |
@@ -121,8 +136,10 @@ All files are created **inside the `RL-Tracker\` folder** automatically — noth
 
 ---
 
-<p align="center">
-  Built with ❤️ by <b>Magnifico</b> + <b>Hermes AI Collective</b> · 
-  <a href="https://github.com/magnificolv/RocketTracker/issues">Report Bug</a> ·
-  <a href="https://github.com/magnificolv/RocketTracker/releases">All Releases</a>
-</p>
+<div align="center">
+
+Built with ❤️ by **Magnifico** + **Hermes AI Collective**
+
+[🐛 Report Bug](https://github.com/magnificolv/RocketTracker/issues) · [📦 All Releases](https://github.com/magnificolv/RocketTracker/releases) · [⭐ Star the repo](https://github.com/magnificolv/RocketTracker/stargazers)
+
+</div>
