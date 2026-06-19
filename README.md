@@ -6,8 +6,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/magnificolv/RocketTracker/releases/latest">
-    <img src="https://img.shields.io/badge/⬇️%20Download-v1.0.3-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.0.3" height="40">
+  <a href="https://github.com/magnificolv/RocketTracker/releases/tag/v1.0.3">
+    <img src="https://img.shields.io/badge/⬇️%20Download-v1.0.3%20ZIP-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.0.3 ZIP" height="40">
   </a>
   &nbsp;
   <a href="https://github.com/magnificolv/RocketTracker/releases">
@@ -15,7 +15,7 @@
   </a>
 </p>
 
-> ⚡ **Double-click the .exe — that's it.** A console window opens, your browser opens the dashboard, and stats appear as you play. **14 MB** portable.
+> 📦 **Download the ZIP, extract it to your Desktop, open the folder, and double‑click the .exe.** A console window opens, your browser opens the dashboard, and stats appear as you play. **Everything stays inside the folder — no scattered files.**
 
 ---
 
@@ -57,15 +57,19 @@
 
 ## 🚀 Quick Start
 
-**1. Download** → [**RL-Tracker-v1.0.3.exe**](https://github.com/magnificolv/RocketTracker/releases/latest) (14 MB)
+**1. Download** → [**RL-Tracker-v1.0.3.zip**](https://github.com/magnificolv/RocketTracker/releases/tag/v1.0.3) (13 MB)
 
-**2. Double-click** → Console window opens, dashboard at `http://localhost:3010`
+**2. Extract** → Right‑click the ZIP → **Extract All…** → Choose your **Desktop** (or anywhere convenient)
 
-**3. Enter your name** → ⚙️ Settings → type your Rocket League display name → **Save**
+**3. Open the folder** → `RL-Tracker\` → **double‑click** `RL-Tracker-v1.0.3.exe`
 
-**4. Launch Rocket League** → Play a match, stats appear automatically 🎉
+**4. Enter your name** → ⚙️ Settings → type your Rocket League display name → **Save**
+
+**5. Launch Rocket League** → Play a match, stats appear automatically 🎉
 
 > 💡 **First time?** Click **Auto-Create** in Settings to set up the Stats API config. Restart RL once.
+>
+> 💡 **Keep the folder together.** All data (`data.db`, `config.yaml`, logs) is saved **inside** the `RL-Tracker\` folder. Don't drag the .exe out.
 
 ---
 
@@ -77,7 +81,7 @@
 |----------|-----------|
 | Chrome/Edge bloķē download | Pogas blakus `···` → **Keep anyway** |
 | Defender izdzēsa failu | Windows Security → Protection history → Atjaunot |
-| Pievienot izņēmumu | Windows Security → Exclusions → Add `C:\Users\%USERNAME%\Desktop\RL-Tracker-Release` |
+| Pievienot izņēmumu | Windows Security → Exclusions → Add `C:\Users\%USERNAME%\Desktop\RL-Tracker` |
 
 ---
 
@@ -89,15 +93,20 @@
 | `config.yaml` | Your player name & friends |
 | `listener.log` | Debug log (delete occasionally) |
 
+All files are created **inside the `RL-Tracker\` folder** automatically — nothing ends up on your Desktop or Downloads folder.
+
 ---
 
 ## 🛠️ For Friends
 
-1. Download [RL-Tracker-v1.0.3.exe](https://github.com/magnificolv/RocketTracker/releases/latest)
-2. Double-click to run
-3. Enter YOUR Rocket League name in ⚙️ Settings
-4. Click **Auto-Create** to set up the config
-5. Restart Rocket League, play!
+1. Download [**RL-Tracker-v1.0.3.zip**](https://github.com/magnificolv/RocketTracker/releases/tag/v1.0.3)
+2. **Extract the ZIP** to Desktop → you'll get an `RL-Tracker\` folder
+3. **Double‑click** `RL-Tracker-v1.0.3.exe` inside the folder
+4. Enter YOUR Rocket League name in ⚙️ Settings
+5. Click **Auto-Create** to set up the config
+6. Restart Rocket League, play!
+
+> ⚠️ **Important:** Run the .exe from **inside the `RL-Tracker\` folder**. If you move the .exe to another location, the data files will be created there instead.
 
 ---
 
