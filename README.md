@@ -1,113 +1,103 @@
-# 🚀 Rocket League Match Tracker v1.0.3
+# 🚀 Rocket League Match Tracker
 
-> **Portable Windows App** — no Python, no WSL, no install. Double-click to run.
+<p align="center">
+  <img src="icon.png" width="96" alt="RL Tracker logo"><br>
+  <strong>Auto-track your Rocket League matches. No install, no Python, no WSL.</strong>
+</p>
 
-Track your Rocket League matches automatically. Stats, history, deep analytics — all in a clean dark dashboard. Built for competitive players who want to understand their game.
+<p align="center">
+  <a href="https://github.com/magnificolv/RocketTracker/releases/latest">
+    <img src="https://img.shields.io/badge/⬇️%20Download-v1.0.3-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.0.3" height="40">
+  </a>
+  &nbsp;
+  <a href="https://github.com/magnificolv/RocketTracker/releases">
+    <img src="https://img.shields.io/badge/All%20Releases-Releases-blue?style=for-the-badge" alt="All Releases" height="40">
+  </a>
+</p>
 
----
-
-## ✨ Features
-
-- 🎮 **Auto-tracking** — detects matches, goals, demos, boost usage, and more via RL's built-in Stats API
-- 📊 **Deep Stats** — shot power (km/h), accuracy %, boost %, air time %, demos, ball control
-- 📋 **Session History** — browse past sessions, click any match for detailed breakdown
-- 🎯 **Duo Mode** — tracks you + your friend in the same match
-- 🌐 **Web Dashboard** — opens in your browser at `http://localhost:3010`
-- ⚡ **Fast & Light** — non-blocking TCP listener, won't lag your game
-
----
-
-## 🖥️ Screenshots
-
-| Active Session | History |
-|---------------|---------|
-| ![Active Session](screenshots/01-active-session.png) | ![History](screenshots/03-history-sessions.png) |
-
-| Stats Overview | Session Deep Stats |
-|---------------|-------------------|
-| ![Stats Overview](screenshots/02-stats-overview.png) | ![Session Deep Stats](screenshots/04-session-deep-stats.png) |
-
-> *Active Session: live match scores + per-match deep stats · History: browse past sessions · Stats: all-time analytics · Session Deep Stats: click any completed session for its aggregate breakdown*
+> ⚡ **Double-click the .exe — that's it.** A console window opens, your browser opens the dashboard, and stats appear as you play. **14 MB** portable.
 
 ---
 
-## 📦 Installation
+## 📸 Screenshots
 
-### 1. Download
-Download **`RL-Tracker-v1.0.3.exe`** from **[Releases](https://github.com/magnificolv/RocketTracker/releases)**.
-
-[![Download v1.0.3](https://img.shields.io/badge/Download-v1.0.3-orange?style=for-the-badge)](https://github.com/magnificolv/RocketTracker/releases/download/v1.0.3/RL-Tracker-v1.0.3.exe)
-
-### 2. Extract
-Extract the ZIP to your **Desktop** (or any dedicated folder). You'll get:
-```
-RL-Tracker/
-  ├── RL-Tracker-v1.0.3.exe
-  └── README.txt
-```
-> ⚠️ **Don't run the .exe directly from Downloads!** All data files (database, config) are created next to the .exe. Keep the folder together.
-
-### 3. Run
-Double-click `RL-Tracker-v1.0.1.exe`. A console window opens — **keep it running**.
-
-### 3. Open Dashboard
-Your browser opens automatically at `http://localhost:3010`.
-
-### 4. Set Your Player Name
-Click ⚙️ **Settings** → enter your Rocket League display name → **Save**.
-
-### 5. Launch Rocket League
-The tracker auto-connects. Status dot turns 🟢 green when tracking is live. Play a match — stats appear automatically!
-
-> **⚠️ First time?** After entering your name, restart Rocket League so the Stats API activates.
+<table>
+<tr>
+  <td width="50%"><b>🎮 Active Session</b><br><i>Live match scores, per-match deep stats</i></td>
+  <td width="50%"><b>📋 History</b><br><i>Browse past sessions, click to expand</i></td>
+</tr>
+<tr>
+  <td><img src="screenshots/01-active-session.png" alt="Active Session"></td>
+  <td><img src="screenshots/03-history-sessions.png" alt="History"></td>
+</tr>
+<tr>
+  <td width="50%"><b>📊 Stats Overview</b><br><i>All-time analytics with deep breakdowns</i></td>
+  <td width="50%"><b>🔍 Session Deep Stats</b><br><i>Aggregate stats per completed session</i></td>
+</tr>
+<tr>
+  <td><img src="screenshots/02-stats-overview.png" alt="Stats Overview"></td>
+  <td><img src="screenshots/04-session-deep-stats.png" alt="Session Deep Stats"></td>
+</tr>
+</table>
 
 ---
 
-## 🔧 Requirements
+## ✨ What It Tracks
 
-- **Windows 10/11** (64-bit)
-- **Rocket League** (Steam or Epic Games)
-- That's it! The .exe bundles everything else.
-
----
-
-## 🗂️ Files Created
-
-| File | Location | Purpose |
-|------|----------|---------|
-| `data.db` | Next to .exe | All your match data (persists between runs) |
-| `config.yaml` | Next to .exe | Your player name & friends |
-| `listener.log` | Next to .exe | Debug log (grows over time — delete occasionally) |
+| Category | Stats |
+|----------|-------|
+| 🎯 **Shot Power** | Fastest goal (km/h), avg shot power, shot accuracy %, total shots |
+| ⛽ **Movement** | Avg boost %, time boosting %, supersonic %, air time % |
+| 💥 **Combat** | Demos given, demos taken, saves, overtime matches |
+| 🎮 **Ball Control** | Total touches, car touches, assists, your goals |
+| 👥 **Duo Mode** | Auto-detects when your friend is on your team |
+| 📋 **Sessions** | Auto-creates sessions, keeps full history |
 
 ---
 
-## 🛡️ Windows Defender / SmartScreen
+## 🚀 Quick Start
 
-> **"Virus detected" vai fails tiek izdzēsts?** Tas ir **false positive** — `RL-Tracker.exe` ir tīrs. Windows Defender karotī neparakstītas `.exe` programmas.
+**1. Download** → [**RL-Tracker-v1.0.3.exe**](https://github.com/magnificolv/RocketTracker/releases/latest) (14 MB)
 
-**Kā salabot:**
-1. **Chromium pārlūkos** (Chrome/Edge/Brave): download pogai blakus → `···` → **"Keep"** vai **"Keep anyway"**
-2. **Windows Defender izdzēsa failu?** Atver Windows Security → Protection history → atjauno bloķēto failu
-3. **Pievieno izņēmumu:** Windows Security → Virus & threat protection → Manage settings → Exclusions → Add folder `C:\Users\%USERNAME%\Desktop\RL-Tracker-Release`
-4. **Alternatīvi:** izmanto citu pārlūku (Firefox mazāk agresīvi bloķē `.exe` failus)
+**2. Double-click** → Console window opens, dashboard at `http://localhost:3010`
 
-| Problem | Fix |
-|---------|-----|
-| Status stays ⚫ grey | Make sure Rocket League is running AND you're in a match (not main menu) |
-| No stats appear | Check your player name matches exactly in Settings |
-| Port 3010 already in use | Close other instances of the tracker first |
-| .exe crashes immediately | Try running as Administrator (RL config folder may need permissions) |
+**3. Enter your name** → ⚙️ Settings → type your Rocket League display name → **Save**
+
+**4. Launch Rocket League** → Play a match, stats appear automatically 🎉
+
+> 💡 **First time?** Click **Auto-Create** in Settings to set up the Stats API config. Restart RL once.
+
+---
+
+## 🛡️ Windows Defender
+
+"Virus detected" ir **false positive** — fails nav parakstīts. Kā salabot:
+
+| Problēma | Risinājums |
+|----------|-----------|
+| Chrome/Edge bloķē download | Pogas blakus `···` → **Keep anyway** |
+| Defender izdzēsa failu | Windows Security → Protection history → Atjaunot |
+| Pievienot izņēmumu | Windows Security → Exclusions → Add `C:\Users\%USERNAME%\Desktop\RL-Tracker-Release` |
+
+---
+
+## 🗂️ Files
+
+| File | Purpose |
+|------|---------|
+| `data.db` | All match data (persists between runs) |
+| `config.yaml` | Your player name & friends |
+| `listener.log` | Debug log (delete occasionally) |
 
 ---
 
 ## 🛠️ For Friends
 
-1. Download `RL-Tracker-v1.0.3.exe`
+1. Download [RL-Tracker-v1.0.3.exe](https://github.com/magnificolv/RocketTracker/releases/latest)
 2. Double-click to run
-3. Enter YOUR Rocket League display name in Settings
-4. Play!
-
-Each player needs their own `config.yaml` with their name. The tracker auto-creates the Stats API config in your RL folder.
+3. Enter YOUR Rocket League name in ⚙️ Settings
+4. Click **Auto-Create** to set up the config
+5. Restart Rocket League, play!
 
 ---
 
@@ -115,16 +105,14 @@ Each player needs their own `config.yaml` with their name. The tracker auto-crea
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v1.0.3** | Jun 19, 2026 | Fixed: TAStatsAPI.ini `[System]` → `[TAGame.MatchStatsExporter_TA]` (RL port fix for friends), duo detection re-checks every tick, Recent Form shows oldest→newest, float rounding in Stats tab (`.toFixed(1)`) |
-| **v1.0.1** | Jun 18, 2026 | Fixed: `json_module` NameError crash, session deep stats, per-match expand, DB persistence next to exe, shot accuracy cap |
-| **v1.0** | Jun 17, 2026 | First public release. Cleaned dependencies, fixed portability, removed dead code. |
-| v9g | Jun 16, 2026 | Custom icon, all features stable |
-| v1-v8 | Jun 10-15, 2026 | Internal development (dedup, demolish tracking, deep stats, PyInstaller builds) |
+| **v1.0.3** | Jun 19 | TAStatsAPI.ini section fix, duo re-check, Recent Form order, float rounding |
+| **v1.0.1** | Jun 18 | json_module crash fix, session deep stats, DB persistence |
+| **v1.0** | Jun 17 | First public release |
 
 ---
 
-## 🔗 Links
-
-- [Latest Release](https://github.com/magnificolv/RocketTracker/releases)
-- [Report a Bug](https://github.com/magnificolv/RocketTracker/issues)
-- Built with ❤️ by Magnifico + Hermes AI Collective
+<p align="center">
+  Built with ❤️ by <b>Magnifico</b> + <b>Hermes AI Collective</b> · 
+  <a href="https://github.com/magnificolv/RocketTracker/issues">Report Bug</a> ·
+  <a href="https://github.com/magnificolv/RocketTracker/releases">All Releases</a>
+</p>

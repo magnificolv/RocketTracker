@@ -1,0 +1,36 @@
+# Build artifacts
+build/
+dist/
+*.exe
+*.pkg
+*.pyz
+
+# Personal data
+data.db
+config.yaml
+listener.log
+listener_status.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Old spec files (keep only current)
+RL-Tracker-DEBUG.spec
+RL-Tracker-v4-FAST.spec
+RL-Tracker-v4-FIX.spec
+RL-Tracker-v5-FINAL.spec
+RL-Tracker-v6-DEDUP.spec
+RL-Tracker-v7.spec
+RL-Tracker-v8.spec
+RL-Tracker-v9.spec
+RL-Tracker-v9b.spec
+RL-Tracker-v9c.spec
+RL-Tracker-v9d.spec
+RL-Tracker-v9e.spec
+RL-Tracker-v9f.spec
