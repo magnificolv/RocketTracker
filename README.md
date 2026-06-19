@@ -1,4 +1,4 @@
-# 🚀 Rocket League Match Tracker
+# 🚀 Rocket League Match Tracker v1.0.4
 
 <p align="center">
   <img src="icon.png" width="96" alt="RL Tracker logo"><br>
@@ -114,6 +114,7 @@ All files are created **inside the `RL-Tracker\` folder** automatically — noth
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v1.0.4** | Jun 20 | GLM 5.2 code review: 17 fixes — dedup timestamp, false losses, GoalScored crash, tie validation, float rounding, ground/wall time display |
 | **v1.0.3** | Jun 19 | TAStatsAPI.ini section fix, duo re-check, Recent Form order, float rounding |
 | **v1.0.1** | Jun 18 | json_module crash fix, session deep stats, DB persistence |
 | **v1.0** | Jun 17 | First public release |
