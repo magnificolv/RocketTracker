@@ -1,4 +1,4 @@
-# 🚀 Rocket League Match Tracker v1.0
+# 🚀 Rocket League Match Tracker v1.0.3
 
 > **Portable Windows App** — no Python, no WSL, no install. Double-click to run.
 
@@ -34,15 +34,15 @@ Track your Rocket League matches automatically. Stats, history, deep analytics �
 ## 📦 Installation
 
 ### 1. Download
-Download **`RL-Tracker-v1.0.1.zip`** from **[Releases](https://github.com/magnificolv/RocketTracker/releases)**.
+Download **`RL-Tracker-v1.0.3.exe`** from **[Releases](https://github.com/magnificolv/RocketTracker/releases)**.
 
-[![Download v1.0.1](https://img.shields.io/badge/Download-v1.0.1-orange?style=for-the-badge)](https://github.com/magnificolv/RocketTracker/releases/download/v1.0.1/RL-Tracker-v1.0.1.zip)
+[![Download v1.0.3](https://img.shields.io/badge/Download-v1.0.3-orange?style=for-the-badge)](https://github.com/magnificolv/RocketTracker/releases/download/v1.0.3/RL-Tracker-v1.0.3.exe)
 
 ### 2. Extract
 Extract the ZIP to your **Desktop** (or any dedicated folder). You'll get:
 ```
 RL-Tracker/
-  ├── RL-Tracker-v1.0.1.exe
+  ├── RL-Tracker-v1.0.3.exe
   └── README.txt
 ```
 > ⚠️ **Don't run the .exe directly from Downloads!** All data files (database, config) are created next to the .exe. Keep the folder together.
@@ -81,7 +81,15 @@ The tracker auto-connects. Status dot turns 🟢 green when tracking is live. Pl
 
 ---
 
-## 🔧 Troubleshooting
+## 🛡️ Windows Defender / SmartScreen
+
+> **"Virus detected" vai fails tiek izdzēsts?** Tas ir **false positive** — `RL-Tracker.exe` ir tīrs. Windows Defender karotī neparakstītas `.exe` programmas.
+
+**Kā salabot:**
+1. **Chromium pārlūkos** (Chrome/Edge/Brave): download pogai blakus → `···` → **"Keep"** vai **"Keep anyway"**
+2. **Windows Defender izdzēsa failu?** Atver Windows Security → Protection history → atjauno bloķēto failu
+3. **Pievieno izņēmumu:** Windows Security → Virus & threat protection → Manage settings → Exclusions → Add folder `C:\Users\%USERNAME%\Desktop\RL-Tracker-Release`
+4. **Alternatīvi:** izmanto citu pārlūku (Firefox mazāk agresīvi bloķē `.exe` failus)
 
 | Problem | Fix |
 |---------|-----|
@@ -94,7 +102,7 @@ The tracker auto-connects. Status dot turns 🟢 green when tracking is live. Pl
 
 ## 🛠️ For Friends
 
-1. Download `RL-Tracker-v1.0.exe`
+1. Download `RL-Tracker-v1.0.3.exe`
 2. Double-click to run
 3. Enter YOUR Rocket League display name in Settings
 4. Play!
@@ -107,6 +115,8 @@ Each player needs their own `config.yaml` with their name. The tracker auto-crea
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **v1.0.3** | Jun 19, 2026 | Fixed: TAStatsAPI.ini `[System]` → `[TAGame.MatchStatsExporter_TA]` (RL port fix for friends), duo detection re-checks every tick, Recent Form shows oldest→newest, float rounding in Stats tab (`.toFixed(1)`) |
+| **v1.0.1** | Jun 18, 2026 | Fixed: `json_module` NameError crash, session deep stats, per-match expand, DB persistence next to exe, shot accuracy cap |
 | **v1.0** | Jun 17, 2026 | First public release. Cleaned dependencies, fixed portability, removed dead code. |
 | v9g | Jun 16, 2026 | Custom icon, all features stable |
 | v1-v8 | Jun 10-15, 2026 | Internal development (dedup, demolish tracking, deep stats, PyInstaller builds) |
