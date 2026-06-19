@@ -93,9 +93,18 @@ def add_match(sid):
     d = request.get_json() or {}
     us, os_ = d.get("user_score"), d.get("opponent_score")
     if us is None or os_ is None: return jsonify({"error": "Scores required"}), 400
+    try:
+        us, os_ = int(us), int(os_)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Scores must be integers"}), 400
+    if us == os_: return jsonify({"error": "Ties are not supported — Rocket League matches always have a winner"}), 400
     result = "win" if us > os_ else "loss"
     conn = get_db()
-    cur = conn.execute("INSERT INTO matches (session_id, played_at, user_score, opponent_score, result, mode) VALUES (?,?,?,?,?,?)", (sid, datetime.now(timezone.utc).isoformat(), us, os_, result, conn.execute("SELECT mode FROM sessions WHERE id=?", (sid,)).fetchone()["mode"]))
+    srow = conn.execute("SELECT mode FROM sessions WHERE id=?", (sid,)).fetchone()
+    if not srow:
+        conn.close()
+        return jsonify({"error": "Session not found"}), 404
+    cur = conn.execute("INSERT INTO matches (session_id, played_at, user_score, opponent_score, result, mode) VALUES (?,?,?,?,?,?)", (sid, datetime.now(timezone.utc).isoformat(), us, os_, result, srow["mode"]))
     mid = cur.lastrowid; conn.commit(); conn.close()
     return jsonify({"id": mid, "result": result}), 201
 
@@ -122,7 +131,7 @@ def stats():
     o = dict(conn.execute("SELECT COUNT(*) as total, SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses FROM matches").fetchone())
     s = dict(conn.execute("SELECT COUNT(*) as total, SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses FROM matches WHERE mode='solo'").fetchone())
     d = dict(conn.execute("SELECT COUNT(*) as total, SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses FROM matches WHERE mode='duo'").fetchone())
-    rec = conn.execute("SELECT result, user_score, opponent_score, mode, played_at FROM matches ORDER BY played_at DESC LIMIT 20").fetchall()
+    rec = conn.execute("SELECT result, user_score, opponent_score, mode, played_at FROM matches ORDER BY played_at DESC, id DESC LIMIT 20").fetchall()
     sc = conn.execute("SELECT COUNT(*) as total FROM sessions").fetchone()["total"]; cc = conn.execute("SELECT COUNT(*) as total FROM sessions WHERE status='completed'").fetchone()["total"]
     conn.close()
     return jsonify({"overall": o, "solo": s, "duo": d, "recent": [dict(r) for r in rec], "sessions": {"total": sc, "completed": cc}, "duo_by_friend": []})
@@ -149,7 +158,7 @@ def player_config():
 @app.route("/api/status")
 def api_status():
     c = load_config()
-    return jsonify({"ok": True, "app": "RL Tracker v1.0.3", "version": "1.0.3", "player_configured": bool(c.get("player", {}).get("name"))})
+    return jsonify({"ok": True, "app": "RL Tracker v1.0.4", "version": "1.0.4", "player_configured": bool(c.get("player", {}).get("name"))})
 
 @app.route("/api/rl-config", methods=["GET"])
 def rl_config_status():
@@ -157,7 +166,11 @@ def rl_config_status():
     cd = find_rl_config_dir(); r = {"config_dir_found": cd is not None, "ini_exists": False, "ini_correct": False}
     if cd:
         ip = cd / "TAStatsAPI.ini"; r["ini_exists"] = ip.exists()
-        if ip.exists(): r["ini_correct"] = "PacketSendRate=30" in ip.read_text()
+        if ip.exists():
+            try:
+                r["ini_correct"] = "PacketSendRate=30" in ip.read_text()
+            except Exception:
+                r["ini_correct"] = False
     return jsonify(r)
 
 @app.route("/api/rl-config", methods=["POST"])
@@ -184,8 +197,10 @@ def deep_stats():
             ROUND(AVG(boost_time_pct), 1) as avg_boost_time,
             ROUND(AVG(supersonic_time_pct), 1) as avg_supersonic_time,
             ROUND(AVG(air_time_pct), 1) as avg_air_time,
+            ROUND(AVG(ground_time_pct), 1) as avg_ground_time,
+            ROUND(AVG(wall_time_pct), 1) as avg_wall_time,
             MAX(fastest_goal_kph) as all_time_fastest_goal,
-            AVG(avg_shot_power) as overall_avg_shot_power
+            ROUND(AVG(avg_shot_power), 1) as overall_avg_shot_power
         FROM match_details
     """).fetchone()
     total_goals = conn.execute("SELECT COUNT(*) as cnt FROM goals").fetchone()["cnt"]
@@ -216,8 +231,10 @@ def session_deep_stats(sid):
             ROUND(AVG(boost_time_pct), 1) as avg_boost_time,
             ROUND(AVG(supersonic_time_pct), 1) as avg_supersonic_time,
             ROUND(AVG(air_time_pct), 1) as avg_air_time,
+            ROUND(AVG(ground_time_pct), 1) as avg_ground_time,
+            ROUND(AVG(wall_time_pct), 1) as avg_wall_time,
             MAX(fastest_goal_kph) as all_time_fastest_goal,
-            AVG(avg_shot_power) as overall_avg_shot_power
+            ROUND(AVG(avg_shot_power), 1) as overall_avg_shot_power
         FROM match_details WHERE match_id IN (SELECT id FROM matches WHERE session_id=?)
     """, (sid,)).fetchone()
     total_user_goals = conn.execute("SELECT SUM(user_score) FROM matches WHERE session_id=?", (sid,)).fetchone()[0] or 0

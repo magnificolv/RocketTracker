@@ -10,7 +10,7 @@ import sqlite3
 import socket
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 if sys.platform == "win32":
@@ -61,9 +61,14 @@ def ensure_tastatsapi_ini():
         return False
     ini_path = config_dir / "TAStatsAPI.ini"
     needed = "[TAGame.MatchStatsExporter_TA]\nPort=49123\nPacketSendRate=30\n"
-    if ini_path.exists() and "TAGame.MatchStatsExporter_TA" in ini_path.read_text() and "PacketSendRate=30" in ini_path.read_text():
-        log("OK: TAStatsAPI.ini already correct")
-        return True
+    if ini_path.exists():
+        try:
+            current = ini_path.read_text()
+        except Exception:
+            current = ""
+        if "TAGame.MatchStatsExporter_TA" in current and "PacketSendRate=30" in current:
+            log("OK: TAStatsAPI.ini already correct")
+            return True
     try:
         ini_path.write_text(needed)
         log("OK: TAStatsAPI.ini created/updated")
@@ -282,10 +287,15 @@ class MatchState:
         session = db.execute("SELECT id FROM sessions WHERE status='active' ORDER BY started_at DESC LIMIT 1").fetchone()
         if session:
             session_id = session["id"]
-            # Dedup: skip if same scores already recorded in last 60s
+            # Dedup: skip if same scores already recorded in last 60s.
+            # Compute cutoff in Python (ISO8601) so the string comparison matches
+            # the stored played_at format — SQLite's datetime('now','-60 seconds')
+            # returns 'YYYY-MM-DD HH:MM:SS' which compares wrong against our
+            # 'YYYY-MM-DDTHH:MM:SS+00:00' stored values (T > space lexicographically).
+            cutoff = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
             existing = db.execute(
-                "SELECT id FROM matches WHERE session_id=? AND user_score=? AND opponent_score=? AND played_at > datetime('now', '-60 seconds')",
-                (session_id, self.user_score, self.opponent_score)
+                "SELECT id FROM matches WHERE session_id=? AND user_score=? AND opponent_score=? AND played_at > ?",
+                (session_id, self.user_score, self.opponent_score, cutoff)
             ).fetchone()
             if existing:
                 log(f"SKIP DUP: match already recorded (id={existing['id']})")
@@ -354,7 +364,7 @@ def run_listener(player: str, friends: list, stop_event):
     update_status("starting", "Initializing...", player, friends)
 
     log("=" * 50)
-    log("RL Raw TCP Listener (Windows Portable v7 FAST)")
+    log("RL Raw TCP Listener (Portable v1.0.4)")
     log(f"   Player: {player or '(not set)'} | Friends: {', '.join(friends) if friends else 'none'}")
     log("=" * 50)
 
@@ -493,9 +503,10 @@ def run_listener(player: str, friends: list, stop_event):
                             if not sname:
                                 pos += end; continue
                             steam = scorer.get("TeamNum", -1)
-                            state.scores[steam] = state.scores[steam] + 1 if steam in (0, 1) else state.scores[steam]
+                            if steam in (0, 1):
+                                state.scores[steam] = state.scores[steam] + 1
                             gs = d.get("GoalSpeed")
-                            speed_kph = round(gs, 1) if gs else None  # GoalSpeed already in km/h
+                            speed_kph = round(gs, 1) if gs is not None else None  # GoalSpeed already in km/h
                             state.goals.append({
                                 "scored_at": datetime.now(timezone.utc).isoformat(),
                                 "scorer": sname, "assister": d.get("Assister", {}).get("Name") or None,
@@ -576,11 +587,14 @@ def run_listener(player: str, friends: list, stop_event):
 
             # Connection ended
             sock.close()
+            # Do NOT record in-progress matches on disconnect — a dropped
+            # connection is not a match-end signal. Recording partial scores
+            # creates false "loss" entries when the player rage-quits or RL
+            # crashes. Match-end events (bHasWinner/MatchEnded/MatchDestroyed)
+            # are the only authoritative signals. Just reset state.
             if state.user_team_num is not None and state.tick_count > 0:
-                res = "win" if state.user_score > state.opponent_score else "loss"
-                log(f"Saving in-progress match: {res}")
-                state.record_match(res)
-                state.reset()
+                log(f"Connection dropped mid-match (scores: {state.scores[0]}-{state.scores[1]}). Not recording — match was not finished.")
+            state.reset()
 
         except (ConnectionRefusedError, socket.timeout):
             update_status("disconnected", "RL not running", player, friends)
