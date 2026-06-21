@@ -311,10 +311,22 @@ class MatchState:
                     self.boosting_ticks += 1
                 if p.get("bSupersonic"):
                     self.supersonic_ticks += 1
-                if p.get("bOnGround"):
-                    self.on_ground_ticks += 1
-                elif p.get("bOnWall"):
+                # FIX (v1.1.1 wall-time bug): check bOnWall BEFORE bOnGround.
+                # When driving on the wall, RL reports BOTH bOnGround=True
+                # (≥3 wheels touching world — the wall IS world geometry) AND
+                # bOnWall=True simultaneously. The old if/elif checked
+                # bOnGround first, so every wall tick fell into the ground
+                # branch and on_wall_ticks stayed 0 → Wall Time always 0%.
+                # bOnWall IS a valid SPECTATOR field per the official RL Stats
+                # API docs (confirmed via rocketleague.com/developer/stats-api
+                # and github.com/spoody999/EAC-Broadcast-Overlay/api-info.md);
+                # the original "field doesn't exist" hypothesis was wrong.
+                # Prioritizing wall over ground makes the three states
+                # mutually exclusive in the order: wall > ground > air.
+                if p.get("bOnWall"):
                     self.on_wall_ticks += 1
+                elif p.get("bOnGround"):
+                    self.on_ground_ticks += 1
                 else:
                     self.in_air_ticks += 1
 
