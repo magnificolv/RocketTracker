@@ -16,7 +16,7 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data.db"
 
 # v1.1: Auto-update check against GitHub releases.
-APP_VERSION = "1.2.3"
+APP_VERSION = "1.3.0"
 GITHUB_REPO = "magnificolv/RocketTracker"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -241,8 +241,9 @@ def rl_config_status():
 
 @app.route("/api/rl-config", methods=["POST"])
 def rl_config_create():
-    from listener import ensure_tastatsapi_ini
+    from listener import ensure_tastatsapi_ini, ensure_default_statsapi_ini
     ok = ensure_tastatsapi_ini()
+    ensure_default_statsapi_ini()  # also fix install-dir DefaultStatsAPI.ini (Epic Games bug)
     return jsonify({"created": ok, "message": "TAStatsAPI.ini created" if ok else "Could not create"})
 
 
@@ -866,7 +867,7 @@ def session_deep_stats(sid):
 
 @app.route("/api/update", methods=["POST"])
 def update_tracker():
-    """v1.2.3: One-click seamless update.
+    """v1.3.0: One-click seamless update.
     
     Downloads the latest release ZIP from GitHub, extracts it to a temp
     directory, copies the user's data.db + config.yaml into the new version,

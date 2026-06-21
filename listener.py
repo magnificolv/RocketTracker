@@ -105,6 +105,67 @@ def ensure_tastatsapi_ini():
         return False
 
 
+def ensure_default_statsapi_ini():
+    """Fix DefaultStatsAPI.ini in the RL install directory (Epic Games / Steam).
+
+    Rocket League reads DefaultStatsAPI.ini from the install dir on startup
+    AND actively rewrites it with PacketSendRate=0 on some Epic Games builds.
+    This fixes the file and makes it read-only so RL cannot revert it.
+    """
+    import stat
+    ini_content = "[TAGame.MatchStatsExporter_TA]\nPort=49123\nPacketSendRate=30\n"
+    # Find RL install dir — same logic as app.py:_find_rl_install_dir()
+    candidates = []
+    progfiles = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    # Steam
+    for base in [Path(progfiles) / "Steam" / "steamapps" / "common" / "rocketleague"]:
+        if (base / "TAGame" / "Config").is_dir():
+            candidates.append(base)
+    # Epic Games
+    for base in [Path(progfiles) / "Epic Games" / "rocketleague",
+                 Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Epic Games" / "rocketleague"]:
+        if (base / "TAGame" / "Config").is_dir():
+            candidates.append(base)
+    # Also check running process path
+    try:
+        import subprocess as _sp
+        out = _sp.run(["wmic", "process", "where", "name='RocketLeague.exe'", "get", "ExecutablePath", "/format:list"],
+                      capture_output=True, text=True, timeout=4)
+        for line in out.stdout.splitlines():
+            line = line.strip()
+            if line.lower().endswith("rocketleague.exe"):
+                p = Path(line)
+                if p.exists():
+                    candidates.insert(0, p.parent.parent)  # bin -> install root
+    except Exception:
+        pass
+    
+    for install_dir in candidates:
+        dsi = install_dir / "TAGame" / "Config" / "DefaultStatsAPI.ini"
+        if not dsi.exists():
+            continue
+        try:
+            current = dsi.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        if "PacketSendRate=30" in current and "Port=49123" in current:
+            log(f"OK: DefaultStatsAPI.ini already correct at {dsi}")
+            # Ensure read-only
+            try:
+                dsi.chmod(stat.S_IREAD)
+            except Exception:
+                pass
+            return True
+        try:
+            dsi.write_text(ini_content, encoding="ascii")
+            dsi.chmod(stat.S_IREAD)  # read-only — RL cannot overwrite
+            log(f"OK: DefaultStatsAPI.ini fixed + locked at {dsi}")
+            return True
+        except Exception as e:
+            log(f"WARN: Could not fix DefaultStatsAPI.ini at {dsi}: {e}")
+    return False
+
+
 def load_config():
     try:
         import yaml
