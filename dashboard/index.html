@@ -179,7 +179,9 @@ function renderUpdateResult(d){
     if(d.release_notes){html+='<div style="font-size:.72rem;color:var(--text-muted);margin-top:6px;white-space:pre-wrap;max-height:140px;overflow:auto;border-top:1px solid var(--border);padding-top:6px">'+d.release_notes.replace(/</g,'&lt;')+'</div>'}
     if(d.published_at){html+='<div style="font-size:.68rem;color:var(--text-muted);margin-top:6px">Published '+formatDate(d.published_at)+'</div>'}
     html+='<div style="display:flex;gap:6px;margin-top:10px"><a href="'+d.download_url+'" target="_blank" class="btn btn-primary" style="font-size:.72rem;text-decoration:none">⬇️ Download v'+d.latest+'</a><a href="'+(d.release_url||'#')+'" target="_blank" class="btn btn-ghost" style="font-size:.72rem;text-decoration:none">📄 Release page</a></div>';
-    html+='<p style="font-size:.68rem;color:var(--text-muted);margin-top:8px;line-height:1.4">Download the ZIP, extract it, and replace the old folder. <b>data.db</b> and <b>config.yaml</b> carry over — your stats are safe.</p>';
+    html+='<div style="display:flex;gap:6px;margin-top:8px"><button onclick="performUpdate()" class="btn" style="font-size:.75rem;padding:10px 22px;background:linear-gradient(135deg,#f97316,#ef4444);color:white;border:none;font-weight:700;cursor:pointer;width:100%">⚡ One-Click Update (auto-install + restart)</button></div>';
+    html+='<p style="font-size:.68rem;color:var(--text-muted);margin-top:6px">Downloads, installs, preserves your data, and restarts automatically.</p>';
+    html+='<div id="update-progress" style="display:none;margin-top:8px;padding:10px;background:rgba(249,115,22,0.1);border:1px solid var(--orange);border-radius:6px;font-size:.74rem"></div>';
     html+='</div>';
   }else{
     if(badge){badge.textContent='✅ v'+d.latest+' latest';badge.style.color='var(--green)'}
@@ -202,7 +204,32 @@ async function silentUpdateCheck(){
   }catch(e){/* silent — never nag on load failure */}
 }
 
-// ====== Diagnostics (self-serve "port 49123 closed" troubleshooter) ======
+// ====== One-click update (v1.1.4) ======
+async function performUpdate(){
+  const prog=document.getElementById('update-progress');
+  if(!prog)return;
+  prog.style.display='block';
+  prog.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div class="spinner"></div><span>Downloading update...</span></div>';
+  try{
+    const r=await api('/api/update',{method:'POST'});
+    if(r.ok){
+      prog.innerHTML='<div style="color:var(--green);font-weight:700">✅ '+r.message+'</div><div style="font-size:.68rem;color:var(--text-muted);margin-top:4px">The tracker will restart in a moment...</div>';
+      // The server will shut down — the page will become unreachable.
+      // Show a final message and let the updater.bat handle the restart.
+      showToast('🔄 Updating to v'+r.new_version+'...');
+    }else{
+      prog.innerHTML='<div style="color:var(--red);font-weight:600">❌ Update failed</div><div style="font-size:.72rem;color:var(--text-secondary);margin-top:4px">'+r.error+'</div>';
+    }
+  }catch(e){
+    // Server may have already shut down — that's expected
+    if(e.message.includes('not reachable')||e.message.includes('Failed to fetch')){
+      prog.innerHTML='<div style="color:var(--green);font-weight:700">✅ Update launched!</div><div style="font-size:.68rem;color:var(--text-muted);margin-top:4px">The tracker is restarting with the new version. You can close this window.</div>';
+      showToast('🔄 Tracker is restarting...');
+    }else{
+      prog.innerHTML='<div style="color:var(--red);font-weight:600">❌ Update failed</div><div style="font-size:.72rem;color:var(--text-secondary);margin-top:4px">'+e.message+'</div>';
+    }
+  }
+}
 async function runDiagnostics(){
   const box=document.getElementById('diag-results');
   box.style.display='block';

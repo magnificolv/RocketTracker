@@ -1,7 +1,7 @@
 """
 Rocket League Tracker - Flask API (Portable Edition)
 """
-import json, sqlite3, os as _os, sys, threading as _th
+import json, sqlite3, os as _os, sys, io, threading as _th
 from datetime import datetime, timezone
 from pathlib import Path
 import yaml
@@ -16,7 +16,7 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data.db"
 
 # v1.1: Auto-update check against GitHub releases.
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.3"
 GITHUB_REPO = "magnificolv/RocketTracker"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -167,8 +167,9 @@ def api_status():
 
 # ====== v1.1: Auto-update check ======
 def _parse_semver(v):
-    """Parse 'v1.0.9' / '1.1' / '1.0.9-rc1' into a tuple of ints for comparison.
-    Non-numeric suffixes are stripped, so '1.0.9-rc1' == '1.0.9' numerically."""
+    """Parse 'v1.0.9' / '1.1' / '1.0.9-rc1' into a 3-tuple of ints for comparison.
+    Non-numeric suffixes are stripped, so '1.0.9-rc1' == '1.0.9' numerically.
+    Pads to exactly 3 components so '1.1' == '1.1.0'."""
     s = str(v).strip().lstrip("vV")
     parts = []
     for p in s.split("."):
@@ -177,7 +178,10 @@ def _parse_semver(v):
             if ch.isdigit(): num += ch
             else: break
         parts.append(int(num) if num else 0)
-    return tuple(parts)
+    # Pad to exactly 3 components
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts[:3])  # only first 3 matter for comparison
 
 @app.route("/api/check-update")
 def check_update():
@@ -859,6 +863,167 @@ def session_deep_stats(sid):
     a["total_goals"] = total_user_goals
     a["shot_accuracy"] = min(round(total_user_goals / max(a.get("total_shots") or 1, 1) * 100, 1), 100.0) if total_user_goals > 0 else 0
     return jsonify({"aggregates": {k: (v or 0) for k, v in a.items()}})
+
+@app.route("/api/update", methods=["POST"])
+def update_tracker():
+    """v1.1.4: One-click seamless update.
+    
+    Downloads the latest release ZIP from GitHub, extracts it to a temp
+    directory, copies the user's data.db + config.yaml into the new version,
+    writes an updater.bat script, launches it, and exits the tracker.
+    
+    The updater script (Windows batch):
+      1. Waits 2s for the old process to fully exit.
+      2. Force-kills any lingering RL-Tracker process (safety).
+      3. Copies the new files over the old install directory.
+      4. Launches the new exe.
+      5. Cleans up the temp directory and self-deletes.
+    """
+    import urllib.request, urllib.error
+    import zipfile, tempfile, shutil
+
+    # 1. Fetch the latest release metadata from GitHub
+    try:
+        req = urllib.request.Request(GITHUB_RELEASES_API, headers={
+            "User-Agent": f"RocketTracker/{APP_VERSION}",
+            "Accept": "application/vnd.github+json",
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            release = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return jsonify({"ok": False, "error": f"GitHub API returned HTTP {e.code}"}), 502
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Cannot reach GitHub ({e.__class__.__name__}: {e})"}), 502
+
+    # 2. Find the .zip download asset
+    zip_url = None
+    for a in release.get("assets", []) or []:
+        name = (a.get("name") or "").lower()
+        if name.endswith(".zip"):
+            zip_url = a.get("browser_download_url")
+            break
+    if not zip_url:
+        # Fall back to source zipball if no portable .zip asset
+        zip_url = release.get("zipball_url")
+    if not zip_url:
+        return jsonify({"ok": False, "error": "No downloadable .zip asset found in the latest release"}), 404
+
+    tag = release.get("tag_name", "unknown")
+
+    # 3. Download the ZIP to a temp file
+    try:
+        req = urllib.request.Request(zip_url, headers={
+            "User-Agent": f"RocketTracker/{APP_VERSION}",
+        })
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            zip_bytes = resp.read()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Download failed ({e.__class__.__name__}: {e})"}), 502
+
+    # 4. Extract to a temp directory
+    tmp_root = Path(tempfile.gettempdir()) / "rl-tracker-update"
+    if tmp_root.exists():
+        shutil.rmtree(str(tmp_root), ignore_errors=True)
+    tmp_root.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            zf.extractall(str(tmp_root))
+    except Exception as e:
+        shutil.rmtree(str(tmp_root), ignore_errors=True)
+        return jsonify({"ok": False, "error": f"ZIP extraction failed ({e})"}), 500
+
+    # GitHub zipballs nest everything one level deep (repo-name-commit/).
+    # Walk into that directory if it's the only child.
+    children = list(tmp_root.iterdir())
+    if len(children) == 1 and children[0].is_dir():
+        tmp_root = children[0]
+
+    # 5. Find the new .exe file
+    new_exe = None
+    for f in tmp_root.glob("*.exe"):
+        new_exe = f
+        break
+    if not new_exe:
+        # Search one level deeper (some ZIPs have a subfolder)
+        for d in tmp_root.iterdir():
+            if d.is_dir():
+                for f in d.glob("*.exe"):
+                    new_exe = f
+                    break
+            if new_exe:
+                break
+    if not new_exe:
+        shutil.rmtree(str(tmp_root.parent if tmp_root.parent.name == "rl-tracker-update" else tmp_root), ignore_errors=True)
+        return jsonify({"ok": False, "error": "No .exe found in the downloaded archive"}), 500
+
+    new_exe_name = new_exe.name
+
+    # 6. Copy user data into the extracted new version
+    for data_file in ["data.db", "config.yaml"]:
+        src = BASE_DIR / data_file
+        if src.exists():
+            try:
+                shutil.copy2(str(src), str(tmp_root / data_file))
+            except Exception:
+                pass  # non-fatal — updater will try again
+
+    # 7. Write the updater.bat script
+    updater_bat = tmp_root / "updater.bat"
+    bat_content = f"""@echo off
+title RL Tracker Updater
+echo Updating Rocket League Tracker to {tag}...
+:: Wait for the old process to fully exit
+timeout /t 2 /nobreak >nul
+:: Kill any lingering RL-Tracker process (safety)
+taskkill /f /im "RL-Tracker*.exe" 2>nul
+taskkill /f /im "RL-Tracker.exe" 2>nul
+:: Copy new files over the old install directory
+echo Installing new version...
+xcopy /E /Y /I "{str(tmp_root).rstrip(chr(92))}\\*" "{str(BASE_DIR).rstrip(chr(92))}\\" >nul
+:: Launch the new tracker
+echo Starting Rocket League Tracker...
+start "" "{str(BASE_DIR / new_exe_name)}"
+:: Schedule cleanup of temp directory (runs after this script exits)
+start /b "" cmd /c "timeout /t 3 /nobreak >nul & rmdir /s /q \"{str(tmp_root)}\" 2>nul"
+:: Self-destruct
+(goto) 2>nul & del "%~f0"
+"""
+    try:
+        updater_bat.write_text(bat_content, encoding="ascii", errors="replace")
+    except Exception as e:
+        shutil.rmtree(str(tmp_root.parent if tmp_root.parent.name == "rl-tracker-update" else tmp_root), ignore_errors=True)
+        return jsonify({"ok": False, "error": f"Could not write updater script ({e})"}), 500
+
+    # 8. Launch the updater and schedule exit
+    try:
+        if sys.platform == "win32":
+            _os.startfile(str(updater_bat))
+        else:
+            import subprocess as _sp
+            _sp.Popen(["bash", str(updater_bat)], stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Could not launch updater ({e})", "updater_path": str(updater_bat)}), 500
+
+    # 9. Exit the tracker (deferred to let the HTTP response go out first)
+    def _shutdown():
+        import time as _t
+        _t.sleep(0.3)
+        # Stop listener if running
+        ev = app.config.get("listener_stop_event")
+        if ev:
+            ev.set()
+        _t.sleep(0.2)
+        _os._exit(0)
+
+    _th.Thread(target=_shutdown, daemon=True).start()
+
+    return jsonify({
+        "ok": True,
+        "message": f"Updating to {tag}...",
+        "new_version": tag.lstrip("vV"),
+        "exe_name": new_exe_name,
+    })
 
 @app.route("/api/quit", methods=["POST"])
 def quit_tracker():
