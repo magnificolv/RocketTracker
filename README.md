@@ -1,7 +1,7 @@
 <div align="center">
   <img src="icon.png" width="128" alt="RocketTracker logo"><br>
   <h1>🚀 RocketTracker</h1>
-  <p><strong>Auto-track every Rocket League match — no install, no Python, no WSL.</strong></p>
+  <p><strong>Auto-track every Rocket League match — portable, no install required.</strong></p>
   <p>Double-click the .exe and play. Stats appear automatically.</p>
 </div>
 
