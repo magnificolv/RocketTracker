@@ -35,7 +35,7 @@ from listener import run_listener, ensure_tastatsapi_ini
 
 def main():
     print("=" * 50)
-    print("  🚀 Rocket League Tracker v1.2.1")
+    print("  🚀 Rocket League Tracker v1.2.2")
     print(f"  📁 {BASE_DIR}")
     print("=" * 50)
 
@@ -62,11 +62,11 @@ def main():
     app.config["listener_thread"] = listener_thread
     app.config["listener_stop_event"] = stop_event
 
-    def open_browser():
-        time.sleep(1.5)
-        webbrowser.open(f"http://localhost:{config.get('app', {}).get('port', 3010)}")
-
-    threading.Thread(target=open_browser, daemon=True).start()
+    if "--no-browser" not in sys.argv[1:]:
+        def open_browser():
+            time.sleep(1.5)
+            webbrowser.open(f"http://localhost:{config.get('app', {}).get('port', 3010)}")
+        threading.Thread(target=open_browser, daemon=True).start()
 
     port = config.get("app", {}).get("port", 3010)
     print(f"  🌐 Dashboard -> http://localhost:{port}")

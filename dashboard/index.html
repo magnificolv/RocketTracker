@@ -77,7 +77,7 @@ body{font-family:var(--font);background:var(--bg-primary);background-image:url('
 
 <div class="listener-bar"><div class="dot dot-off" id="listener-dot"></div><span id="listener-msg">Auto-tracker: not running</span></div>
 
-<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">Portable Edition v1.2.1 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:600;font-size:.72rem">● Update available</span></p></div>
+<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">Portable Edition v1.2.2 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:600;font-size:.72rem">● Update available</span></p></div>
 
 <nav class="nav"><button class="nav-btn active" data-tab="active-session">🎮 Active Session</button><button class="nav-btn" data-tab="history">📋 History</button><button class="nav-btn" data-tab="stats">📊 Stats</button></nav>
 
@@ -204,7 +204,7 @@ async function silentUpdateCheck(){
   }catch(e){/* silent — never nag on load failure */}
 }
 
-// ====== One-click update (v1.2.1) ======
+// ====== One-click update (v1.2.2) ======
 async function performUpdate(){
   const prog=document.getElementById('update-progress');
   if(!prog)return;

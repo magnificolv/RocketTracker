@@ -16,7 +16,7 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data.db"
 
 # v1.1: Auto-update check against GitHub releases.
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 GITHUB_REPO = "magnificolv/RocketTracker"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -866,7 +866,7 @@ def session_deep_stats(sid):
 
 @app.route("/api/update", methods=["POST"])
 def update_tracker():
-    """v1.2.1: One-click seamless update.
+    """v1.2.2: One-click seamless update.
     
     Downloads the latest release ZIP from GitHub, extracts it to a temp
     directory, copies the user's data.db + config.yaml into the new version,
@@ -983,7 +983,7 @@ echo Installing new version...
 xcopy /E /Y /I "{str(tmp_root).rstrip(chr(92))}\\*" "{str(BASE_DIR).rstrip(chr(92))}\\" >nul
 :: Launch the new tracker
 echo Starting Rocket League Tracker...
-start "" "{str(BASE_DIR / new_exe_name)}"
+start "" "{str(BASE_DIR / new_exe_name)}" --no-browser
 :: Schedule cleanup of temp directory (runs after this script exits)
 start /b "" cmd /c "timeout /t 3 /nobreak >nul & rmdir /s /q \"{str(tmp_root)}\" 2>nul"
 :: Self-destruct
