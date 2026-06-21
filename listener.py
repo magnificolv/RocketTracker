@@ -44,12 +44,39 @@ def flush_log():
             _log_queue.clear()
 
 
-def find_rl_config_dir():
-    candidates = [
-        Path(os.environ.get("USERPROFILE", "")) / "Documents" / "My Games" / "Rocket League" / "TAGame" / "Config",
-        Path.home() / "Documents" / "My Games" / "Rocket League" / "TAGame" / "Config",
+def find_rl_config_candidates():
+    """Return ALL candidate RL config paths (existing or not) for diagnostics.
+
+    Order matters: the first existing path is what find_rl_config_dir() returns.
+    Includes OneDrive-redirected Documents, a common cause of "INI in wrong
+    location" for friends whose Documents folder is synced via OneDrive.
+    """
+    userprofile = Path(os.environ.get("USERPROFILE", "") or "")
+    home = Path.home()
+    # Relative tail common to every candidate
+    rel = Path("My Games") / "Rocket League" / "TAGame" / "Config"
+    raw = [
+        userprofile / "Documents" / rel,
+        home / "Documents" / rel,
+        # OneDrive redirected Documents (very common on Win11)
+        userprofile / "OneDrive" / "Documents" / rel,
+        userprofile / "OneDrive" / rel,
+        # Edge case: Documents explicitly under OneDrive root
+        home / "OneDrive" / "Documents" / rel,
     ]
-    for c in candidates:
+    # Deduplicate while preserving order
+    seen = set()
+    out = []
+    for c in raw:
+        s = str(c)
+        if s and s not in seen:
+            seen.add(s)
+            out.append(c)
+    return out
+
+
+def find_rl_config_dir():
+    for c in find_rl_config_candidates():
         if c.exists():
             return c
     return None
@@ -364,7 +391,7 @@ def run_listener(player: str, friends: list, stop_event):
     update_status("starting", "Initializing...", player, friends)
 
     log("=" * 50)
-    log("RL Raw TCP Listener (Portable v1.0.4)")
+    log("RL Raw TCP Listener (Portable v1.0.5)")
     log(f"   Player: {player or '(not set)'} | Friends: {', '.join(friends) if friends else 'none'}")
     log("=" * 50)
 
@@ -386,6 +413,12 @@ def run_listener(player: str, friends: list, stop_event):
 
     state = MatchState(player, friends)
     update_status("connecting", "Connecting to Rocket League...", player, friends)
+
+    # Capture the TAStatsAPI.ini path that was detected, so we can surface it
+    # in every connection-failure log line. This is the #1 thing friends need
+    # to see when the port stays closed — "is the INI even in the right place?"
+    _config_dir = find_rl_config_dir()
+    _ini_path_str = str(_config_dir / "TAStatsAPI.ini") if _config_dir else "(config dir not found)"
 
     reconnect_delay = 3
     max_delay = 30
@@ -596,9 +629,9 @@ def run_listener(player: str, friends: list, stop_event):
                 log(f"Connection dropped mid-match (scores: {state.scores[0]}-{state.scores[1]}). Not recording — match was not finished.")
             state.reset()
 
-        except (ConnectionRefusedError, socket.timeout):
+        except (ConnectionRefusedError, socket.timeout) as e:
             update_status("disconnected", "RL not running", player, friends)
-            log(f"RL not available - retrying in {reconnect_delay}s...")
+            log(f"RL not available - retrying in {reconnect_delay}s... | error={type(e).__name__} | TAStatsAPI.ini at: {_ini_path_str} | TIP: Rocket League reads TAStatsAPI.ini only at startup — fully quit and restart RL if the port stays closed.")
         except Exception as e:
             log(f"Error: {e}")
 

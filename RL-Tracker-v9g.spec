@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='RL-Tracker-v1.0.4',
+    name='RL-Tracker-v1.0.5',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -76,7 +76,7 @@ body{font-family:var(--font);background:var(--bg-primary);background-image:url('
 
 <div class="listener-bar"><div class="dot dot-off" id="listener-dot"></div><span id="listener-msg">Auto-tracker: not running</span></div>
 
-<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">Portable Edition v1.0.4</p></div>
+<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">Portable Edition v1.0.5</p></div>
 
 <nav class="nav"><button class="nav-btn active" data-tab="active-session">🎮 Active Session</button><button class="nav-btn" data-tab="history">📋 History</button><button class="nav-btn" data-tab="stats">📊 Stats</button></nav>
 
@@ -100,7 +100,9 @@ body{font-family:var(--font);background:var(--bg-primary);background-image:url('
 <div style="background:var(--bg-input);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:.82rem;font-weight:600">🔧 RL Stats API Config</span><span id="rl-config-badge" style="font-size:.7rem;padding:2px 8px;border-radius:50px;background:var(--bg-card)">Checking...</span></div>
 <p id="rl-config-msg" style="font-size:.72rem;color:var(--text-secondary);margin-bottom:8px"></p>
-<div style="display:flex;gap:6px"><button class="btn btn-ghost" onclick="checkRlConfig()" style="font-size:.72rem">🔄 Check</button><button class="btn btn-primary" onclick="createRlConfig()" style="font-size:.72rem">📝 Auto-Create</button></div></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="checkRlConfig()" style="font-size:.72rem">🔄 Check</button><button class="btn btn-primary" onclick="createRlConfig()" style="font-size:.72rem">📝 Auto-Create</button><button class="btn btn-ghost" onclick="runDiagnostics()" style="font-size:.72rem;border-color:var(--border-active);color:var(--border-active)">🔍 Diagnose</button></div>
+<div id="diag-results" style="display:none;margin-top:12px;padding:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.78rem"></div>
+</div>
 <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" onclick="toggleSettings()">Cancel</button><button class="btn btn-primary" onclick="saveSettings()">💾 Save</button></div></div></div>
 
 <script>
@@ -143,6 +145,57 @@ function toggleSettings(){const m=document.getElementById('settings-modal');if(m
 async function saveSettings(){const n=document.getElementById('cfg-player-name').value.trim(),fr=document.getElementById('cfg-friends').value.trim(),fs=fr?fr.split('\n').map(f=>f.trim()).filter(Boolean):[];try{await api('/api/config',{method:'POST',body:JSON.stringify({name:n,friends:fs})});showToast('✅ Settings saved! Listener will auto-detect...');toggleSettings();setTimeout(pollListenerStatus,3000)}catch(e){showToast('❌ '+e.message)}}
 async function checkRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Checking...';try{const s=await api('/api/rl-config');if(!s.config_dir_found){b.textContent='❌ Not Found';m.textContent='RL Config folder not found.'}else if(!s.ini_exists){b.textContent='⚠️ Missing';m.textContent='TAStatsAPI.ini not found. Click Auto-Create.'}else if(!s.ini_correct){b.textContent='⚠️ Wrong';m.textContent='PacketSendRate not 30. Click Auto-Create.'}else{b.textContent='✅ OK';m.textContent='TAStatsAPI.ini is correct!'}}catch(e){b.textContent='❌ Error';m.textContent=e.message}}
 async function createRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Creating...';try{const r=await api('/api/rl-config',{method:'POST'});if(r.created){b.textContent='✅ Created!';m.textContent='TAStatsAPI.ini created! Restart Rocket League.';showToast('✅ Restart RL!')}else{b.textContent='❌ Failed';m.textContent=r.message}}catch(e){b.textContent='❌ Error';m.textContent=e.message}}
+
+// ====== Diagnostics (self-serve "port 49123 closed" troubleshooter) ======
+async function runDiagnostics(){
+  const box=document.getElementById('diag-results');
+  box.style.display='block';
+  box.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div>Running diagnostics...</div>';
+  let d;
+  try{d=await api('/api/rl-diagnostics')}
+  catch(e){box.innerHTML='<p style="color:var(--red)">❌ Could not run diagnostics: '+e.message+'</p>';return}
+
+  // Build a user-friendly summary (NOT raw JSON)
+  const checks=[];
+  // Config folder
+  checks.push({label:'RL Config folder',ok:d.config_dir_found,detail:d.config_dir_found?d.config_dir_path:'Not found in any known location'});
+  // INI exists
+  checks.push({label:'TAStatsAPI.ini exists',ok:d.ini_exists,detail:d.ini_exists?'Present':'Missing — click 📝 Auto-Create'});
+  // INI correct
+  if(d.ini_exists){
+    checks.push({label:'TAStatsAPI.ini content correct',ok:d.ini_correct,detail:d.ini_correct?'Port=49123 + PacketSendRate=30 + correct section':'Content is wrong — click 📝 Auto-Create to fix'});
+  }
+  // RL running
+  checks.push({label:'Rocket League running',ok:d.rl_process_running,detail:d.rl_process_running?('Found: '+(d.rl_processes_found.join(', ')||'yes')):'No RocketLeague.exe process detected'});
+  // Port open
+  checks.push({label:'Port 49123 reachable',ok:d.port_49123_open,detail:d.port_49123_open?'Open — Stats API is responding':(d.port_49123_error||'Closed')});
+
+  let html='<div style="font-weight:700;margin-bottom:10px;color:var(--text-primary)">🔍 Diagnostic Results</div>';
+  html+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
+  checks.forEach(c=>{
+    const icon=c.ok?'✅':'❌';
+    const color=c.ok?'var(--green)':'var(--red)';
+    html+='<div style="display:flex;gap:8px;align-items:flex-start"><span style="flex-shrink:0">'+icon+'</span><div><span style="color:'+color+';font-weight:600">'+c.label+'</span><br><span style="color:var(--text-muted);font-size:.72rem;word-break:break-all">'+c.detail+'</span></div></div>';
+  });
+  html+='</div>';
+
+  // Suggestions
+  if(d.suggestions&&d.suggestions.length){
+    html+='<div style="font-weight:700;margin-bottom:6px;color:var(--text-primary)">💡 What to do</div>';
+    html+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">';
+    d.suggestions.forEach(s=>{html+='<div style="padding:8px 10px;background:var(--bg-input);border-radius:6px;border-left:3px solid var(--border-active);color:var(--text-secondary);font-size:.74rem;line-height:1.4">'+s+'</div>'});
+    html+='</div>';
+  }
+
+  // Collapsible: INI content + alt paths (for power users / sharing with Magnifico)
+  html+='<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text-muted);font-size:.72rem">📋 Technical details (INI content + paths checked)</summary>';
+  html+='<div style="margin-top:8px;font-size:.7rem;color:var(--text-muted)">';
+  html+='<div style="margin-bottom:6px"><b>Paths checked:</b><br>'+d.alternative_paths_checked.map(p=>'• '+p+(p===d.config_dir_path?' ✅ (used)':'')).join('<br>')+'</div>';
+  if(d.ini_full_content){html+='<div style="margin-bottom:6px"><b>TAStatsAPI.ini content:</b><pre style="white-space:pre-wrap;background:var(--bg-input);padding:8px;border-radius:6px;margin-top:4px">'+d.ini_full_content.replace(/</g,'&lt;')+'</pre></div>'}
+  html+='</div></details>';
+
+  box.innerHTML=html;
+}
 
 // ====== Exit ======
 async function exitTracker(){if(!confirm('Exit RL Tracker?'))return;try{await api('/api/quit',{method:'POST'})}catch(e){}showToast('👋 Tracker shut down.');setTimeout(()=>window.close(),500)}

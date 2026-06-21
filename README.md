@@ -25,7 +25,7 @@
 <br>
 
 <a href="https://github.com/magnificolv/RocketTracker/releases/latest">
-  <img src="https://img.shields.io/badge/⬇️%20DOWNLOAD-v1.0.4%20ZIP-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.0.4 ZIP" height="62">
+  <img src="https://img.shields.io/badge/⬇️%20DOWNLOAD-v1.0.5%20ZIP-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.0.5 ZIP" height="62">
 </a>
 
 <br><br>
@@ -80,9 +80,9 @@
 
 ## 🚀 Quick Start
 
-1. **Download** → [**RL-Tracker-v1.0.4.zip**](https://github.com/magnificolv/RocketTracker/releases/latest) (~13 MB)
+1. **Download** → [**RL-Tracker-v1.0.5.zip**](https://github.com/magnificolv/RocketTracker/releases/latest) (~13 MB)
 2. **Extract** → Right-click the ZIP → **Extract All…** → Choose your **Desktop**
-3. **Launch** → Open `RL-Tracker\` → double-click `RL-Tracker-v1.0.4.exe`
+3. **Launch** → Open `RL-Tracker\` → double-click `RL-Tracker-v1.0.5.exe`
 4. **Play** → Enter your name in ⚙️ Settings → launch Rocket League → stats appear automatically 🎉
 
 > 💡 **First time?** Click **Auto-Create** in Settings to set up the Stats API config. Restart RL once.
@@ -106,10 +106,12 @@ The .exe is unsigned, so Defender may flag it. This is a **false positive** — 
 ## 👥 For Friends
 
 1. **Download** the [ZIP](https://github.com/magnificolv/RocketTracker/releases/latest) and **extract** it to your Desktop
-2. **Double-click** `RL-Tracker-v1.0.4.exe` inside the `RL-Tracker\` folder, then enter YOUR Rocket League name in ⚙️ Settings
+2. **Double-click** `RL-Tracker-v1.0.5.exe` inside the `RL-Tracker\` folder, then enter YOUR Rocket League name in ⚙️ Settings
 3. Click **Auto-Create**, restart Rocket League, and play! 🎉
 
 > ⚠️ **Important:** Run the .exe **from inside the `RL-Tracker\` folder**. Moving it elsewhere scatters your data files.
+
+> 🔍 **Tracker says "RL not running" but RL IS running?** Open ⚙️ Settings → click the **🔍 Diagnose** button. It checks your TAStatsAPI.ini, the port, and whether RL is running — then tells you exactly what to fix.
 
 ---
 
@@ -129,6 +131,7 @@ All files are created **inside the `RL-Tracker\` folder** automatically — noth
 
 | Version | Date | Changes |
 |:-------:|:----:|---------|
+| **v1.0.5** | Jun 21 | Self-serve diagnostics: `/api/rl-diagnostics` endpoint + 🔍 Diagnose button in Settings — checks INI, port 49123, RL process, OneDrive path conflicts, and tells friends exactly what to fix. Listener logs TAStatsAPI.ini path + restart hint on every connection failure. |
 | **v1.0.4** | Jun 20 | GLM 5.2 code review: 17 fixes — dedup timestamp, false losses, GoalScored crash, tie validation, float rounding, ground/wall time display |
 | **v1.0.3** | Jun 19 | TAStatsAPI.ini section fix, duo re-check, Recent Form order, float rounding |
 | **v1.0.1** | Jun 18 | json_module crash fix, session deep stats, DB persistence |

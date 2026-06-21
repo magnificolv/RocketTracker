@@ -158,7 +158,7 @@ def player_config():
 @app.route("/api/status")
 def api_status():
     c = load_config()
-    return jsonify({"ok": True, "app": "RL Tracker v1.0.4", "version": "1.0.4", "player_configured": bool(c.get("player", {}).get("name"))})
+    return jsonify({"ok": True, "app": "RL Tracker v1.0.5", "version": "1.0.5", "player_configured": bool(c.get("player", {}).get("name"))})
 
 @app.route("/api/rl-config", methods=["GET"])
 def rl_config_status():
@@ -178,6 +178,122 @@ def rl_config_create():
     from listener import ensure_tastatsapi_ini
     ok = ensure_tastatsapi_ini()
     return jsonify({"created": ok, "message": "TAStatsAPI.ini created" if ok else "Could not create"})
+
+
+@app.route("/api/rl-diagnostics")
+def rl_diagnostics():
+    """Comprehensive one-shot diagnostics for the "port 49123 closed" problem.
+
+    Returns everything a friend needs to self-diagnose without asking
+    Magnifico: which config dir was found, whether the INI exists and is
+    correct, whether port 49123 is reachable, whether RL is running, and a
+    concrete list of suggestions ordered by likelihood.
+    """
+    import socket as _sock
+    import subprocess as _sp
+    from listener import find_rl_config_candidates, find_rl_config_dir
+
+    diag = {
+        "config_dir_found": False,
+        "config_dir_path": None,
+        "ini_exists": False,
+        "ini_correct": False,
+        "ini_full_content": None,
+        "port_49123_open": False,
+        "port_49123_error": None,
+        "rl_process_running": False,
+        "rl_processes_found": [],
+        "suggestions": [],
+        "alternative_paths_checked": [],
+    }
+
+    # --- Config dir + INI ---
+    candidates = find_rl_config_candidates()
+    diag["alternative_paths_checked"] = [str(c) for c in candidates]
+    cd = find_rl_config_dir()
+    if cd:
+        diag["config_dir_found"] = True
+        diag["config_dir_path"] = str(cd)
+        ip = cd / "TAStatsAPI.ini"
+        diag["ini_exists"] = ip.exists()
+        if ip.exists():
+            try:
+                content = ip.read_text(encoding="utf-8", errors="replace")
+                diag["ini_full_content"] = content
+                diag["ini_correct"] = (
+                    "TAGame.MatchStatsExporter_TA" in content
+                    and "Port=49123" in content
+                    and "PacketSendRate=30" in content
+                )
+            except Exception as e:
+                diag["ini_correct"] = False
+                diag["ini_full_content"] = f"(read error: {e})"
+
+    # --- Port 49123 check ---
+    try:
+        s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+        s.settimeout(2)
+        s.connect(("127.0.0.1", 49123))
+        s.close()
+        diag["port_49123_open"] = True
+    except Exception as e:
+        diag["port_49123_open"] = False
+        diag["port_49123_error"] = f"{type(e).__name__}: {e}"
+
+    # --- Rocket League process check ---
+    procs = []
+    try:
+        if sys.platform == "win32":
+            out = _sp.run(
+                ["tasklist", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, timeout=5
+            ).stdout
+            for line in out.splitlines():
+                ll = line.lower()
+                if "rocketleague" in ll or "rocket league" in ll:
+                    # Extract the image name from the CSV line
+                    try:
+                        name = line.split('","')[0].strip('"')
+                    except Exception:
+                        name = line.split(",")[0].strip('"')
+                    procs.append(name)
+        else:
+            out = _sp.run(
+                ["ps", "-A"], capture_output=True, text=True, timeout=5
+            ).stdout
+            for line in out.splitlines():
+                ll = line.lower()
+                if "rocketleague" in ll or "rocket league" in ll:
+                    procs.append(line.strip())
+    except Exception:
+        pass
+    diag["rl_process_running"] = len(procs) > 0
+    diag["rl_processes_found"] = procs
+
+    # --- Suggestions (ordered by likelihood) ---
+    sugg = []
+    if not diag["config_dir_found"]:
+        sugg.append("❌ RL config folder not found. Launch Rocket League at least once so it creates the Documents/My Games/Rocket League/TAGame/Config folder.")
+    if diag["config_dir_found"] and not diag["ini_exists"]:
+        sugg.append("⚠️ TAStatsAPI.ini is missing in the detected config folder. Open Settings → '📝 Auto-Create' to generate it, then restart Rocket League.")
+    if diag["ini_exists"] and not diag["ini_correct"]:
+        sugg.append("⚠️ TAStatsAPI.ini exists but its content is wrong (needs Port=49123 + PacketSendRate=30 under [TAGame.MatchStatsExporter_TA]). Open Settings → '📝 Auto-Create' to fix it, then restart Rocket League.")
+    if diag["ini_exists"] and diag["ini_correct"] and not diag["port_49123_open"]:
+        sugg.append("🔄 TAStatsAPI.ini is correct but port 49123 is still closed. Fully QUIT Rocket League (not just minimize — close it completely) and launch it again. RL reads TAStatsAPI.ini only at startup.")
+    if diag["rl_process_running"] and not diag["port_49123_open"] and diag["ini_correct"]:
+        sugg.append("🛡️ RL is running and the INI is correct, but the port is closed. Likely causes: (a) RL was started BEFORE the INI was created — restart RL; (b) Windows Firewall is blocking localhost:49123 — allow RocketLeague.exe through; (c) another RL config file is overriding TAStatsAPI.ini.")
+    if not diag["rl_process_running"] and not diag["port_49123_open"]:
+        sugg.append("🎮 Rocket League does not appear to be running. Launch it and enter a match — the Stats API only opens the port while the game is running.")
+    # OneDrive / alt-path hint
+    if diag["config_dir_found"]:
+        existing = diag["config_dir_path"]
+        others = [p for p in diag["alternative_paths_checked"] if p != existing]
+        if others:
+            sugg.append(f"ℹ️ Config found at: {existing}. Also checked {len(others)} other location(s) (e.g. OneDrive Documents). If RL still won't open the port, the INI may need to live in one of those — copy TAStatsAPI.ini there too and restart RL.")
+    if not sugg:
+        sugg.append("✅ Everything looks good! Port 49123 is open and the INI is correct. You should be tracked automatically.")
+    diag["suggestions"] = sugg
+    return jsonify(diag)
 
 @app.route("/api/stats/deep")
 def deep_stats():
