@@ -391,7 +391,7 @@ def run_listener(player: str, friends: list, stop_event):
     update_status("starting", "Initializing...", player, friends)
 
     log("=" * 50)
-    log("RL Raw TCP Listener (Portable v1.0.6)")
+    log("RL Raw TCP Listener (Portable v1.0.7)")
     log(f"   Player: {player or '(not set)'} | Friends: {', '.join(friends) if friends else 'none'}")
     log("=" * 50)
 
@@ -631,11 +631,12 @@ def run_listener(player: str, friends: list, stop_event):
 
         except (ConnectionRefusedError, socket.timeout) as e:
             update_status("disconnected", "RL not running", player, friends)
-            # v1.0.6: classify the error so the log shows Timeout vs Refused.
+            # v1.0.7: classify the error so the log shows Timeout vs Refused.
             # Timeout on 127.0.0.1 is a strong signal of a WFP filter driver
-            # (VPN/AV) dropping SYNs silently — see /api/rl-diagnostics.
-            err_cls = "TIMEOUT (filter driver? run Diagnostics)" if isinstance(e, socket.timeout) else "REFUSED (RL not listening)"
-            log(f"RL not available - retrying in {reconnect_delay}s... | error={type(e).__name__} ({err_cls}) | TAStatsAPI.ini at: {_ini_path_str} | TIP: Rocket League reads TAStatsAPI.ini only at startup — fully quit and restart RL if the port stays closed. NOTE: the Stats API port only opens DURING a match (per Psyonix docs).")
+            # (VPN/AV) OR a WSL2 port-relay (wslrelay.exe) dropping SYNs
+            # silently — see /api/rl-diagnostics for the WSL2 detection block.
+            err_cls = "TIMEOUT (WSL2 relay? VPN filter driver? run Diagnostics)" if isinstance(e, socket.timeout) else "REFUSED (RL not listening)"
+            log(f"RL not available - retrying in {reconnect_delay}s... | error={type(e).__name__} ({err_cls}) | TAStatsAPI.ini at: {_ini_path_str} | TIP: Rocket League reads TAStatsAPI.ini only at startup — fully quit and restart RL if the port stays closed. NOTE: the Stats API port only opens DURING a match (per Psyonix docs). If you have WSL2 installed, run 'wsl --shutdown' in PowerShell — wslrelay.exe can grab 127.0.0.1:49123 and silently drop SYNs.")
         except Exception as e:
             log(f"Error: {e}")
 

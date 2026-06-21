@@ -113,6 +113,13 @@ The .exe is unsigned, so Defender may flag it. This is a **false positive** — 
 
 > 🔍 **Tracker says "RL not running" but RL IS running?** Open ⚙️ Settings → click the **🔍 Diagnose** button. It checks your TAStatsAPI.ini, the port, and whether RL is running — then tells you exactly what to fix.
 
+> 🐧 **Using WSL2 / Docker Desktop / Ubuntu on Windows?** WSL2's localhost forwarder (`wslrelay.exe`) can silently grab port 49123 and intercept the SYNs meant for Rocket League, producing a TIMEOUT error. **Quick fix:** open PowerShell and run `wsl --shutdown`, then restart Rocket League. **Permanent fix:** create or edit `%USERPROFILE%\.wslconfig` and add:
+> ```ini
+> [wsl2]
+> ignoredPorts=49123
+> ```
+> Then run `wsl --shutdown` once. The Diagnose button (v1.0.7+) detects this automatically.
+
 ---
 
 ## 🗂️ Files
@@ -131,6 +138,7 @@ All files are created **inside the `RL-Tracker\` folder** automatically — noth
 
 | Version | Date | Changes |
 |:-------:|:----:|---------|
+| **v1.0.7** | Jun 21 | WSL2 port-forwarding interference detection. The Diagnose button now detects `wslrelay.exe` / `wslhost.exe` grabbing 127.0.0.1:49123 (the most likely cause of TIMEOUT errors on machines with WSL2 / Docker Desktop installed, where no VPN/AV is present). Resolves the netstat listener PID to a process name, parses `%UserProfile%\.wslconfig` (networkingMode, localhostForwarding, hostAddressLoopback, ignoredPorts), checks for the vEthernet (WSL) Hyper-V adapter, and scans Windows excluded port ranges (`netsh int ipv4 show excludedportrange`). Suggests `wsl --shutdown` and `ignoredPorts=49123` as the permanent fix. |
 | **v1.0.5** | Jun 21 | Self-serve diagnostics: `/api/rl-diagnostics` endpoint + 🔍 Diagnose button in Settings — checks INI, port 49123, RL process, OneDrive path conflicts, and tells friends exactly what to fix. Listener logs TAStatsAPI.ini path + restart hint on every connection failure. |
 | **v1.0.4** | Jun 20 | GLM 5.2 code review: 17 fixes — dedup timestamp, false losses, GoalScored crash, tie validation, float rounding, ground/wall time display |
 | **v1.0.3** | Jun 19 | TAStatsAPI.ini section fix, duo re-check, Recent Form order, float rounding |

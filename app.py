@@ -158,7 +158,7 @@ def player_config():
 @app.route("/api/status")
 def api_status():
     c = load_config()
-    return jsonify({"ok": True, "app": "RL Tracker v1.0.6", "version": "1.0.6", "player_configured": bool(c.get("player", {}).get("name"))})
+    return jsonify({"ok": True, "app": "RL Tracker v1.0.7", "version": "1.0.7", "player_configured": bool(c.get("player", {}).get("name"))})
 
 @app.route("/api/rl-config", methods=["GET"])
 def rl_config_status():
@@ -256,6 +256,16 @@ def _find_rl_install_dir():
 def rl_diagnostics():
     """Deep architecture diagnostics for the 'port 49123 closed' problem.
 
+    v1.0.7: WSL2 port-forwarding interference detection. wslrelay.exe /
+    wslhost.exe can grab 127.0.0.1:49123 on Windows when something inside WSL2
+    binds that port, silently intercepting SYNs meant for RocketLeague.exe and
+    producing TimeoutError. Now detects: wsl.exe presence, running distros,
+    relay processes, relay holding 49123 (PID resolved to process name), parses
+    %UserProfile%\\.wslconfig (networkingMode, localhostForwarding,
+    hostAddressLoopback, ignoredPorts), checks for vEthernet (WSL) adapter,
+    and scans Windows excluded port ranges (netsh) — Hyper-V/Docker can reserve
+    49123 so RL.exe cannot bind it at all.
+
     v1.0.6: distinguishes TimeoutError (filter driver drops SYN silently)
     from ConnectionRefused (no listener), probes IPv6 ::1, runs netstat to
     see what is actually bound, scans for VPN/TAP adapters that intercept
@@ -277,6 +287,7 @@ def rl_diagnostics():
         "port_49123_error_class": None,   # timeout | refused | other | none
         "port_49123_ipv6_open": False,    # ::1 probe
         "netstat_listeners": [],          # PIDs listening on 49123
+        "netstat_49123_processes": [],    # v1.0.7: resolved process names for those PIDs
         "rl_process_running": False,
         "rl_processes_found": [],
         "rl_install_dir": None,
@@ -286,9 +297,33 @@ def rl_diagnostics():
         "default_stats_ini_correct": False,
         "vpn_adapters": [],               # suspicious filter-driver adapters
         "all_adapters": [],               # raw adapter names for power users
+        # v1.0.7: WSL2 port-forwarding interference detection.
+        # wslrelay.exe / wslhost.exe listens on Windows 127.0.0.1:PORT for every
+        # port that has a listener inside WSL2 — silently intercepting SYNs that
+        # were meant for a native Windows service on the same port. This is the
+        # most likely root cause of TimeoutError-to-127.0.0.1:49123 on machines
+        # where WSL2 is installed but no VPN/AV is present.
+        "wsl_installed": False,           # wsl.exe present on PATH
+        "wsl_version": None,              # output of `wsl --version`
+        "wsl_running_distros": [],        # `wsl --list --running`
+        "wsl_relay_processes": [],        # wslrelay.exe / wslhost.exe tasklist hits
+        "wsl_relay_holding_49123": False, # relay PID matches a 49123 netstat listener
+        "wsl_config_path": None,          # %UserProfile%\.wslconfig
+        "wsl_config_exists": False,
+        "wsl_config_content": None,
+        "wsl_networking_mode": None,      # NAT (default) | mirrored | virtioproxy
+        "wsl_localhost_forwarding": None, # true (default) | false
+        "wsl_host_address_loopback": None,# true (default) | false
+        "wsl_ignored_ports": [],          # parsed from ignoredPorts=49123,5000
+        "wsl_49123_excluded": False,      # 49123 in wsl_ignored_ports
+        "wsl_veth_adapter": False,        # vEthernet (WSL) Hyper-V adapter present
+        # v1.0.7: Windows reserved port ranges (Hyper-V/Docker/WSL reserve chunks of
+        # the dynamic port range; if 49123 falls in one, RL.exe cannot bind it).
+        "port_exclusion_ranges": [],      # raw `netsh int ipv4 show excludedportrange` rows
+        "port_49123_excluded": False,     # 49123 falls inside an exclusion range
         "suggestions": [],
         "alternative_paths_checked": [],
-        "diagnostics_version": "1.0.6",
+        "diagnostics_version": "1.0.7",
     }
 
     # --- Config dir + INI (user Documents) ---
@@ -416,6 +451,149 @@ def rl_diagnostics():
             if any(kw in ll for kw in vpn_keywords):
                 diag["vpn_adapters"].append(line_s)
 
+    # --- v1.0.7: WSL2 port-forwarding interference detection ---
+    # WSL2's localhost forwarding works via wslrelay.exe / wslhost.exe, which opens
+    # a listening socket on Windows 127.0.0.1:PORT for every port that has a
+    # listener inside the WSL2 VM. If something inside WSL2 binds 49123 (or WSL's
+    # state gets confused), the relay grabs 127.0.0.1:49123 on Windows. RocketLeague.exe
+    # then either fails to bind, or its SYNs get intercepted by the relay and silently
+    # dropped — producing TimeoutError instead of ConnectionRefused. This is the
+    # strongest hypothesis for the friend's "TimeoutError on 127.0.0.1:49123 with
+    # no VPN/AV" symptom, because WSL2 ships with Docker Desktop / dev tooling.
+    # Refs:
+    #   https://learn.microsoft.com/en-us/windows/wsl/wsl-config (ignoredPorts, networkingMode)
+    #   https://github.com/microsoft/WSL/issues/5942  (localhost forwarding bugs)
+    #   https://github.com/microsoft/WSL/issues/9515  (127.0.0.1 mapping interference)
+    if sys.platform == "win32":
+        # 1) Is wsl.exe installed? (present on PATH = WSL feature enabled)
+        wsl_where = _run_cmd(["where", "wsl"], timeout=3)
+        if wsl_where.strip() and "could not find" not in wsl_where.lower():
+            diag["wsl_installed"] = True
+            # `wsl --version` requires a recent WSL; older builds return nonzero.
+            diag["wsl_version"] = _run_cmd(["wsl", "--version"], timeout=4).strip() or None
+            # `wsl --list --running` tells us if the VM is currently up (relay active).
+            running_out = _run_cmd(["wsl", "--list", "--running"], timeout=4)
+            for line in running_out.splitlines():
+                ls = line.strip()
+                if ls and not ls.lower().startswith("there are no running"):
+                    # Strip UTF-8 BOM that wsl.exe emits on the first line.
+                    if ls.startswith("\ufeff"):
+                        ls = ls[1:]
+                    if ls.lower() not in ("windows subsystem for linux", ""):
+                        diag["wsl_running_distros"].append(ls)
+
+        # 2) Find wslrelay.exe / wslhost.exe / wslservice.exe processes.
+        #    wslrelay.exe is the actual port-relay process on Win10/11 NAT mode.
+        tasklist_csv = _run_cmd(["tasklist", "/FO", "CSV", "/NH"], timeout=5)
+        relay_pids = []  # PIDs that are WSL relay processes
+        for line in tasklist_csv.splitlines():
+            ll = line.lower()
+            if "wslrelay" in ll or "wslhost" in ll or "wslservice" in ll:
+                # CSV row: "Name","PID","SessionName","Session#","MemUsage"
+                try:
+                    cells = [c.strip('"') for c in line.split('","')]
+                    name = cells[0]
+                    pid = cells[1] if len(cells) > 1 else ""
+                    diag["wsl_relay_processes"].append(f"{name} (PID {pid})")
+                    if pid.isdigit():
+                        relay_pids.append(pid)
+                except Exception:
+                    diag["wsl_relay_processes"].append(line.strip())
+
+        # 3) Resolve the PID of every netstat listener on 49123 to a process name.
+        #    If wslrelay.exe or wslhost.exe is the one holding 49123, we have a
+        #    smoking gun: WSL2 has grabbed the port out from under RocketLeague.exe.
+        pid_to_name = {}
+        for row in tasklist_csv.splitlines():
+            try:
+                cells = [c.strip('"') for c in row.split('","')]
+                if len(cells) >= 2 and cells[1].isdigit():
+                    pid_to_name[cells[1]] = cells[0]
+            except Exception:
+                pass
+        for listener_line in diag["netstat_listeners"]:
+            parts = listener_line.split()
+            if parts:
+                pid = parts[-1]
+                if pid.isdigit():
+                    pname = pid_to_name.get(pid, "(unknown)")
+                    diag["netstat_49123_processes"].append(f"{pname} (PID {pid})")
+                    if pname.lower() in ("wslrelay.exe", "wslhost.exe", "wslservice.exe") or pid in relay_pids:
+                        diag["wsl_relay_holding_49123"] = True
+
+        # 4) Parse %UserProfile%\.wslconfig (the official user-tunable WSL2 config).
+        #    Key knobs we care about:
+        #      networkingMode=mirrored        — Win11 mirrored mode (more aggressive port sharing)
+        #      localhostForwarding=false      — disable the relay entirely (Win10 default true)
+        #      hostAddressLoopback=false      — disable host loopback into WSL2
+        #      ignoredPorts=49123,5000        — official per-port exclusion (the fix!)
+        userprofile = _os.environ.get("USERPROFILE", "")
+        if userprofile:
+            wsl_cfg_path = Path(userprofile) / ".wslconfig"
+            diag["wsl_config_path"] = str(wsl_cfg_path)
+            diag["wsl_config_exists"] = wsl_cfg_path.exists()
+            if wsl_cfg_path.exists():
+                try:
+                    cfg_text = wsl_cfg_path.read_text(encoding="utf-8", errors="replace")
+                    diag["wsl_config_content"] = cfg_text
+                    # Naive but sufficient: parse key=value lines under [wsl2].
+                    in_wsl2 = False
+                    for raw in cfg_text.splitlines():
+                        line = raw.strip()
+                        if not line or line.startswith("#") or line.startswith(";"):
+                            continue
+                        if line.startswith("[") and line.endswith("]"):
+                            in_wsl2 = line.lower() == "[wsl2]"
+                            continue
+                        if "=" not in line:
+                            continue
+                        key, _, val = line.partition("=")
+                        key = key.strip().lower()
+                        val = val.strip()
+                        if not in_wsl2 and key not in ("networkingmode", "localhostforwarding",
+                                                       "hostaddressloopback", "ignoredports"):
+                            continue
+                        if key == "networkingmode":
+                            diag["wsl_networking_mode"] = val.lower() or "nat"
+                        elif key == "localhostforwarding":
+                            diag["wsl_localhost_forwarding"] = val.lower() in ("true", "1", "yes", "on")
+                        elif key == "hostaddressloopback":
+                            diag["wsl_host_address_loopback"] = val.lower() in ("true", "1", "yes", "on")
+                        elif key == "ignoredports":
+                            for tok in val.replace(";", ",").split(","):
+                                tok = tok.strip()
+                                if tok.isdigit():
+                                    diag["wsl_ignored_ports"].append(int(tok))
+                    diag["wsl_49123_excluded"] = 49123 in diag["wsl_ignored_ports"]
+                except Exception as e:
+                    diag["wsl_config_content"] = f"(read error: {e})"
+
+        # 5) Check for the vEthernet (WSL) Hyper-V virtual adapter. Present whenever
+        #    WSL2 has been enabled, even when no distro is running.
+        ga_lower = "\n".join(diag["all_adapters"]).lower()
+        if "vethernet (wsl)" in ga_lower or "wsl" in ga_lower:
+            diag["wsl_veth_adapter"] = True
+
+        # 6) Windows reserved port ranges — Hyper-V / Docker Desktop / WSL2 reserve
+        #    chunks of the dynamic port range via `netsh int ipv4 show excludedportrange`.
+        #    If 49123 falls inside one, RL.exe cannot bind it at all (WSAEADDRINUSE /
+        #    WSAEACCES), regardless of whether WSL is currently running.
+        excl_out = _run_cmd(
+            ["netsh", "int", "ipv4", "show", "excludedportrange", "protocol=tcp"],
+            timeout=5,
+        )
+        for raw in excl_out.splitlines():
+            ls = raw.strip()
+            if not ls or ls.startswith("Start Port") or ls.startswith("---") or "protocol" in ls.lower():
+                continue
+            # Row format: "10701      10751"  (start end) — possibly with a label column.
+            nums = [int(t) for t in ls.split() if t.isdigit()]
+            if len(nums) >= 2:
+                start, end = nums[0], nums[1]
+                if start <= 49123 <= end:
+                    diag["port_49123_excluded"] = True
+                diag["port_exclusion_ranges"].append(f"{start}-{end}")
+
     # --- Suggestions (ordered by likelihood, keyed to error class) ---
     sugg = []
     ec = diag["port_49123_error_class"]
@@ -431,15 +609,81 @@ def rl_diagnostics():
 
     # TimeoutError-specific guidance (the friend's actual symptom)
     if ec == "timeout":
-        sugg.append("⏱️ TIMEOUT (not ConnectionRefused) — something is silently dropping SYN packets to 127.0.0.1:49123. On localhost this is almost always a Windows Filtering Platform driver, NOT a missing listener. Top causes in order:")
-        if diag["vpn_adapters"]:
+        sugg.append("⏱️ TIMEOUT (not ConnectionRefused) — something is silently dropping SYN packets to 127.0.0.1:49123. On localhost this is almost always a Windows Filtering Platform driver or a port-relay process intercepting the SYN, NOT a missing listener. Top causes in order:")
+
+        # --- WSL2 port-relay interference (v1.0.7 — primary hypothesis) ---
+        # Highest-priority check: the relay is literally holding 49123.
+        if diag.get("wsl_relay_holding_49123"):
+            sugg.append(
+                "🚨 SMOKING GUN: wslrelay.exe / wslhost.exe is LISTENING on 127.0.0.1:49123 right now "
+                f"(processes: {'; '.join(diag['netstat_49123_processes'])}). WSL2's localhost forwarder "
+                "has grabbed port 49123 out from under RocketLeague.exe. SYNs from RL.exe are being "
+                "absorbed by the relay and silently dropped because nothing inside WSL2 is actually "
+                "serving them — hence the TIMEOUT (not REFUSED). "
+                "FIX (pick one, in order of preference):\n"
+                "   A) Quickest test — open PowerShell and run:  wsl --shutdown\n"
+                "      Then re-launch Rocket League and re-run Diagnostics. If the port opens, WSL2 was the culprit.\n"
+                "   B) Permanent fix — add port 49123 to WSL's ignore list. Create or edit "
+                "%USERPROFILE%\\.wslconfig and add under [wsl2]:\n"
+                "        [wsl2]\n"
+                "        ignoredPorts=49123\n"
+                "      Then run 'wsl --shutdown' once. WSL2 will never touch 49123 again.\n"
+                "   C) Nuclear option (if you don't actively use WSL2): disable the 'Windows Subsystem for Linux' "
+                "Windows feature (Turn Windows features on or off → uncheck WSL → reboot)."
+            )
+        elif diag.get("wsl_installed") and diag.get("wsl_running_distros"):
+            # WSL2 is installed AND a distro is currently running — relay is active
+            # even if it hasn't grabbed 49123 right now (state can change at any time).
+            mode = diag.get("wsl_networking_mode") or "nat"
+            sugg.append(
+                f"⚠️ WSL2 is INSTALLED and a distro is RUNNING ({', '.join(diag['wsl_running_distros'])}). "
+                f"Networking mode: {mode}. WSL2's localhost forwarder (wslrelay.exe) opens Windows-side "
+                "sockets for ports used inside WSL2 — it can grab 127.0.0.1:49123 at any time if a WSL "
+                "process happens to bind it, silently intercepting SYNs meant for RocketLeague.exe. "
+                "Even when the relay isn't currently holding 49123, its WFP filters can drop loopback SYNs. "
+                "FIX: run 'wsl --shutdown' in PowerShell and re-test. For a permanent fix, add "
+                "'ignoredPorts=49123' under [wsl2] in %USERPROFILE%\\.wslconfig, then 'wsl --shutdown'."
+            )
+        elif diag.get("wsl_installed"):
+            sugg.append(
+                "⚠️ WSL2 is INSTALLED on this machine but no distro is currently running. The Hyper-V "
+                "virtual switch and WFP filters installed by WSL2 can still interfere with loopback traffic "
+                "even when WSL is idle. If 'wsl --shutdown' doesn't help, try adding 'ignoredPorts=49123' "
+                "under [wsl2] in %USERPROFILE%\\.wslconfig and reboot."
+            )
+
+        # Mirrored networking mode is a separate, more aggressive failure mode on Win11.
+        if diag.get("wsl_networking_mode") == "mirrored":
+            sugg.append(
+                "🌐 WSL2 is in MIRRORED networking mode. Mirrored mode shares the Windows host's network "
+                "stack with WSL2 — WSL processes can directly bind Windows 127.0.0.1 ports, which causes "
+                "hard conflicts with native Windows services. If the fix above doesn't work, switch back "
+                "to NAT mode by removing 'networkingMode=mirrored' from %USERPROFILE%\\.wslconfig, then "
+                "'wsl --shutdown'."
+            )
+
+        # Windows reserved port range (Hyper-V/Docker reserve chunks of dynamic range).
+        if diag.get("port_49123_excluded"):
+            ranges = diag.get("port_exclusion_ranges") or []
+            sugg.append(
+                f"🚫 Port 49123 is inside a Windows EXCLUDED port range (reserved by Hyper-V / WSL2 / "
+                f"Docker Desktop). Reserved ranges on this machine: {', '.join(ranges[:8])}. "
+                "Windows will not allow ANY app to bind to a port in these ranges — RL.exe silently fails "
+                "to open the Stats API. Verify in admin PowerShell:  netsh int ipv4 show excludedportrange protocol=tcp\n"
+                "FIX: either (a) reboot (Hyper-V re-randomizes its reservations on boot, sometimes freeing 49123), "
+                "(b) stop the Hyper-V Host Compute Service (cmd as admin:  net stop winnat  →  net start winnat), "
+                "or (c) permanently reserve 49123 for RL BEFORE Hyper-V grabs it:  "
+                "netsh int ipv4 add excludedportrange protocol=tcp startport=49123 numberofports=1  (admin cmd)."
+            )
+
+        if diag.get("vpn_adapters"):
             sugg.append(f"🚨 VPN/TUN adapter DETECTED: {'; '.join(diag['vpn_adapters'][:3])}. Fully QUIT the VPN app (system tray → Exit), then re-run diagnostics. Even disconnected VPNs leave filter drivers active that intercept loopback traffic.")
         else:
-            sugg.append("1. VPN client installed? Check Windows system tray for NordVPN / ExpressVPN / ProtonVPN / Mullvad / WireGuard / Cisco AnyConnect / GlobalProtect / Zscaler. Fully EXIT it (not just disconnect) and re-test. Filter drivers stay loaded even when the VPN is 'off'.")
-        sugg.append("2. Windows Defender: open 'Windows Security' → 'App & browser control' → 'Smart App Control' (if enabled, disable). Also check 'Settings' → 'Privacy & security' → 'Windows Security' → 'Firewall & network protection' → 'Advanced settings' → 'Inbound Rules' for any rule blocking port 49123.")
-        sugg.append("3. Corporate / enterprise security (CrowdStrike, SentinelOne, Defender for Endpoint) — these install WFP filters that can drop loopback. Ask IT to whitelist 127.0.0.1:49123.")
-        sugg.append("4. Third-party firewall (even uninstalled AVs sometimes leave filter drivers). Run 'Get-NetAdapter' in PowerShell and look for any adapter you don't recognise.")
-        sugg.append("5. Restart the PC. WFP filters can get into a bad state that only a reboot clears.")
+            sugg.append("📋 VPN check: open Windows system tray and look for NordVPN / ExpressVPN / ProtonVPN / Mullvad / WireGuard / Cisco AnyConnect / GlobalProtect / Zscaler. Fully EXIT any you find (not just disconnect) and re-test — filter drivers stay loaded even when the VPN is 'off'.")
+        sugg.append("🛡️ Windows Defender: open 'Windows Security' → 'App & browser control' → 'Smart App Control' (if enabled, disable). Also check 'Firewall & network protection' → 'Advanced settings' → 'Inbound Rules' for any rule blocking port 49123.")
+        sugg.append("🏢 Corporate / enterprise security (CrowdStrike, SentinelOne, Defender for Endpoint) — these install WFP filters that can drop loopback. Ask IT to whitelist 127.0.0.1:49123.")
+        sugg.append("🔌 Third-party firewall (even uninstalled AVs sometimes leave filter drivers). Run 'Get-NetAdapter' in PowerShell and look for any adapter you don't recognise.")
+        sugg.append("♻️ Restart the PC. WFP filters and the WSL relay state can get into a bad state that only a reboot clears.")
 
     if ec == "refused":
         sugg.append("✋ CONNECTION REFUSED — RL has not opened port 49123. The TCP stack is healthy (kernel sent RST). Focus on getting RL to actually read TAStatsAPI.ini and open the port:")

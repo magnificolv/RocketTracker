@@ -191,6 +191,53 @@ async function runDiagnostics(){
   if(d.vpn_adapters){
     checks.push({label:'VPN/TUN adapters',ok:d.vpn_adapters.length===0,detail:d.vpn_adapters.length?d.vpn_adapters.join('; '):'None detected'});
   }
+  // v1.0.7: WSL2 port-forwarding interference (the new primary hypothesis)
+  if(d.wsl_installed!==undefined){
+    let wslOk=!d.wsl_relay_holding_49123;
+    let wslDetail;
+    if(d.wsl_relay_holding_49123){
+      wslDetail='🚨 wslrelay.exe / wslhost.exe is LISTENING on 49123 — WSL2 has grabbed the port out from under RocketLeague.exe. This is the smoking gun. See suggestions below.';
+    }else if(d.wsl_installed && d.wsl_running_distros && d.wsl_running_distros.length){
+      const mode=d.wsl_networking_mode||'nat';
+      wslDetail=`WSL2 installed, distro RUNNING (${d.wsl_running_distros.join(', ')}), networkingMode=${mode}. Relay not currently holding 49123 but can grab it at any time.`;
+    }else if(d.wsl_installed){
+      wslDetail='WSL2 installed (wsl.exe on PATH) but no distro currently running. Hyper-V virtual switch still installed; can interfere with loopback.';
+    }else{
+      wslDetail='WSL2 not installed (wsl.exe not on PATH). WSL2 port-relay interference ruled out.';
+    }
+    checks.push({label:'WSL2 port-relay interference',ok:wslOk,detail:wslDetail});
+  }
+  // v1.0.7: Process actually holding port 49123 (resolved from netstat PID)
+  if(!d.port_49123_open && d.netstat_49123_processes && d.netstat_49123_processes.length){
+    checks.push({label:'Process holding port 49123',ok:false,detail:d.netstat_49123_processes.join('; ')});
+  }
+  // v1.0.7: .wslconfig ignoredPorts check
+  if(d.wsl_installed){
+    let excOk=d.wsl_49123_excluded;
+    let excDetail;
+    if(!d.wsl_config_exists){
+      excDetail=`No .wslconfig at ${d.wsl_config_path||'%USERPROFILE%\\.wslconfig'} — WSL2 is using all defaults. Create one with [wsl2]\\nignoredPorts=49123 to prevent the relay from ever grabbing 49123.`;
+    }else if(d.wsl_49123_excluded){
+      excDetail=`✅ .wslconfig has 49123 in ignoredPorts. WSL2 should never grab this port.`;
+    }else{
+      const ip=d.wsl_ignored_ports&&d.wsl_ignored_ports.length?d.wsl_ignored_ports.join(', '):'(none)';
+      excDetail=`.wslconfig exists at ${d.wsl_config_path} but 49123 is NOT in ignoredPorts (currently: ${ip}). Add ignoredPorts=49123 under [wsl2].`;
+    }
+    checks.push({label:'.wslconfig ignoredPorts=49123',ok:excOk,detail:excDetail});
+  }
+  // v1.0.7: Windows reserved port range (Hyper-V/Docker can reserve 49123)
+  if(d.port_49123_excluded!==undefined){
+    let excRangeOk=!d.port_49123_excluded;
+    let excRangeDetail;
+    if(d.port_49123_excluded){
+      const ranges=d.port_exclusion_ranges||[];
+      excRangeDetail=`🚫 49123 is inside a Windows EXCLUDED port range (Hyper-V/Docker reservation). Ranges: ${ranges.slice(0,6).join(', ')}${ranges.length>6?'…':''}. RL.exe cannot bind.`;
+    }else{
+      const n=(d.port_exclusion_ranges||[]).length;
+      excRangeDetail=n?`${n} excluded range(s) on this machine, none covering 49123. OK.`:'No excluded port ranges. OK.';
+    }
+    checks.push({label:'Windows reserved port range',ok:excRangeOk,detail:excRangeDetail});
+  }
   // DefaultStatsAPI.ini (official Psyonix install-dir location)
   if(d.rl_install_dir){
     checks.push({label:'DefaultStatsAPI.ini (install dir)',ok:d.default_stats_ini_exists&&d.default_stats_ini_correct,detail:d.default_stats_ini_exists?(d.default_stats_ini_correct?'Correct':'Wrong content — '+d.default_stats_ini_path):'MISSING — see suggestions'});
@@ -218,6 +265,28 @@ async function runDiagnostics(){
   html+='<div style="margin-top:8px;font-size:.7rem;color:var(--text-muted)">';
   if(d.rl_install_dir){html+='<div style="margin-bottom:6px"><b>RL install dir:</b> '+d.rl_install_dir+'</div>'}
   if(d.all_adapters&&d.all_adapters.length){html+='<div style="margin-bottom:6px"><b>All network adapters:</b><br>'+d.all_adapters.map(a=>'• '+a).join('<br>')+'</div>'}
+  // v1.0.7: WSL2 technical details
+  if(d.wsl_installed!==undefined){
+    html+='<div style="margin-bottom:6px"><b>WSL2 detection:</b><br>';
+    html+='• wsl_installed: '+d.wsl_installed+'<br>';
+    if(d.wsl_version){html+='• wsl_version: <pre style="white-space:pre-wrap;margin:4px 0">'+d.wsl_version.replace(/</g,'&lt;')+'</pre>'}
+    if(d.wsl_running_distros&&d.wsl_running_distros.length){html+='• running distros: '+d.wsl_running_distros.join(', ')+'<br>'}
+    if(d.wsl_relay_processes&&d.wsl_relay_processes.length){html+='• relay processes: '+d.wsl_relay_processes.join('; ')+'<br>'}
+    html+='• relay holding 49123: <b>'+(d.wsl_relay_holding_49123?'YES — smoking gun':'no')+'</b><br>';
+    html+='• networking mode: '+(d.wsl_networking_mode||'(default NAT)')+'<br>';
+    html+='• localhostForwarding: '+(d.wsl_localhost_forwarding===null?'(default true)':d.wsl_localhost_forwarding)+'<br>';
+    html+='• vEthernet (WSL) adapter: '+d.wsl_veth_adapter+'<br>';
+    if(d.wsl_config_path){
+      html+='• .wslconfig path: '+d.wsl_config_path+' ('+(d.wsl_config_exists?'exists':'MISSING')+')<br>';
+      if(d.wsl_ignored_ports&&d.wsl_ignored_ports.length){html+='• ignoredPorts: '+d.wsl_ignored_ports.join(', ')+'<br>'}
+    }
+    html+='</div>';
+    if(d.wsl_config_content){html+='<div style="margin-bottom:6px"><b>.wslconfig content:</b><pre style="white-space:pre-wrap;background:var(--bg-input);padding:8px;border-radius:6px;margin-top:4px">'+d.wsl_config_content.replace(/</g,'&lt;')+'</pre></div>'}
+  }
+  // v1.0.7: Windows excluded port ranges
+  if(d.port_exclusion_ranges&&d.port_exclusion_ranges.length){
+    html+='<div style="margin-bottom:6px"><b>Windows excluded port ranges (netsh):</b> 49123 '+(d.port_49123_excluded?'<b style="color:var(--red)">IS EXCLUDED</b>':'not excluded')+'<br>'+d.port_exclusion_ranges.map(r=>'• '+r).join('<br>')+'</div>';
+  }
   html+='<div style="margin-bottom:6px"><b>Paths checked (user config):</b><br>'+d.alternative_paths_checked.map(p=>'• '+p+(p===d.config_dir_path?' ✅ (used)':'')).join('<br>')+'</div>';
   if(d.ini_full_content){html+='<div style="margin-bottom:6px"><b>TAStatsAPI.ini content:</b><pre style="white-space:pre-wrap;background:var(--bg-input);padding:8px;border-radius:6px;margin-top:4px">'+d.ini_full_content.replace(/</g,'&lt;')+'</pre></div>'}
   if(d.default_stats_ini_content){html+='<div style="margin-bottom:6px"><b>DefaultStatsAPI.ini content (install dir):</b><pre style="white-space:pre-wrap;background:var(--bg-input);padding:8px;border-radius:6px;margin-top:4px">'+d.default_stats_ini_content.replace(/</g,'&lt;')+'</pre></div>'}
