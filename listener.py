@@ -181,15 +181,58 @@ class MatchState:
         self._was_demolished = False
 
     def _fast_find(self, players, target):
-        """Ultra-fast player lookup - no string slicing."""
+        """Two-pass player lookup. Pass 1: exact (case-insensitive) match
+        across the WHOLE Players list — wins regardless of iteration order.
+        Pass 2: partial-match fallback ONLY if no exact match exists.
+
+        FIX (v1.0.8 team-swap bug): the old single-pass version tried exact
+        then partial per-iteration, so a partial-match candidate earlier in
+        the array (e.g. target 'mag' vs name 'ImageMag') shadowed an exact
+        match later in the array (name 'Mag'), locking user_team_num to the
+        WRONG team for the entire match and inverting every score/result.
+        """
+        # Pass 1: exact match (case-insensitive)
+        for p in players:
+            pname = p.get("Name", "")
+            if pname and pname.lower() == target:
+                return p
+        # Pass 2: partial match fallback (only if NO exact match exists)
         for p in players:
             pname = p.get("Name", "")
             if not pname:
                 continue
-            # Exact match first (most common case)
-            if pname.lower() == target:
+            pname_l = pname.lower()
+            if target in pname_l or pname_l in target:
                 return p
-            # Partial match fallback
+        return None
+
+    def _find_user_player(self, players):
+        """Team-locked user lookup for stats capture. Only ever returns a
+        player on user_team_num, so partial matching can NEVER pick a
+        player from the opposing team and cause team_num/stats to disagree.
+
+        Used AFTER detection has locked user_team_num. Detection itself
+        still uses _fast_find (both teams) because the team is unknown yet.
+        Two-pass: exact name first, partial fallback — both filtered to
+        user_team_num.
+        """
+        if self.user_team_num is None:
+            return None
+        target = self.player_name
+        # Pass 1: exact match on the user's team
+        for p in players:
+            if p.get("TeamNum") != self.user_team_num:
+                continue
+            pname = p.get("Name", "")
+            if pname and pname.lower() == target:
+                return p
+        # Pass 2: partial match on the user's team
+        for p in players:
+            if p.get("TeamNum") != self.user_team_num:
+                continue
+            pname = p.get("Name", "")
+            if not pname:
+                continue
             pname_l = pname.lower()
             if target in pname_l or pname_l in target:
                 return p
@@ -200,22 +243,35 @@ class MatchState:
         game = data.get("Game", {})
         self.tick_count += 1
 
-        # Player detection (only run until found)
+        # Player detection (only run until team is locked).
+        # FIX (v1.0.8): validate TeamNum is 0 or 1 BEFORE trusting it. RL's
+        # first UpdateState after a reset sometimes reports TeamNum=-1 or
+        # None; locking that in broke user_score/opponent_score for the whole
+        # match. Now we DEFER and retry next tick instead of locking bad data.
+        # Also logs "Team detected: N (Blue/Orange)" so a flip between matches
+        # is visible in listener.log.
         if self.user_team_num is None and players:
             p = self._fast_find(players, self.player_name)
             if p:
-                self.user_team_num = p.get("TeamNum", -1)
-                log(f"FOUND PLAYER: {p.get('Name')} on Team {self.user_team_num} ({'Blue' if self.user_team_num == 0 else 'Orange'}) [scores: {self.scores}]")
-                update_status("connected", f"Live - tracking {p.get('Name')}", self.player_name)
-                # Fast duo detection (also done on every tick below)
-                if self._friend_cache:
-                    for fp in players:
-                        if fp.get("TeamNum") == self.user_team_num:
-                            fpname = fp.get("Name", "").lower().strip()
-                            if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
-                                self.mode = "duo"
-                                log(f"Duo detected: {fp.get('Name')}")
-                                break
+                tnum = p.get("TeamNum", -1)
+                if tnum in (0, 1):
+                    self.user_team_num = tnum
+                    team_name = "Blue" if tnum == 0 else "Orange"
+                    log(f"Team detected: {tnum} ({team_name})")
+                    log(f"FOUND PLAYER: {p.get('Name')} on Team {tnum} ({team_name}) [scores: {self.scores}]")
+                    update_status("connected", f"Live - tracking {p.get('Name')}", self.player_name)
+                    # Duo detection at lock time (also re-checked every tick below).
+                    # fp is not p: don't mark the user as their own duo partner.
+                    if self._friend_cache:
+                        for fp in players:
+                            if fp.get("TeamNum") == self.user_team_num and fp is not p:
+                                fpname = fp.get("Name", "").lower().strip()
+                                if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
+                                    self.mode = "duo"
+                                    log(f"Duo detected: {fp.get('Name')}")
+                                    break
+                else:
+                    log(f"DEFER detection: found '{p.get('Name')}' but TeamNum={tnum} (need 0 or 1); retrying next tick")
 
         # Scores (fast)
         teams = game.get("Teams", ())
@@ -233,9 +289,14 @@ class MatchState:
         if "TimeSeconds" in game:
             self.time_remaining = game["TimeSeconds"]
 
-        # Player stats (fast path if user_team_num is set)
+        # Player stats — team-locked lookup.
+        # FIX (v1.0.8): replaces the SECOND _fast_find call that previously
+        # could return a DIFFERENT player (on the wrong team) than the
+        # detection call within the same tick, causing team_num and captured
+        # stats to disagree. Now: detection locked user_team_num reliably,
+        # and _find_user_player only ever returns a player ON user_team_num.
         if self.user_team_num is not None and players:
-            p = self._fast_find(players, self.player_name)
+            p = self._find_user_player(players)
             if p:
                 self.active_tick_count += 1
                 self.touches = p.get("Touches", 0) or 0
@@ -391,7 +452,7 @@ def run_listener(player: str, friends: list, stop_event):
     update_status("starting", "Initializing...", player, friends)
 
     log("=" * 50)
-    log("RL Raw TCP Listener (Portable v1.0.7)")
+    log("RL Raw TCP Listener (Portable v1.0.8)")
     log(f"   Player: {player or '(not set)'} | Friends: {', '.join(friends) if friends else 'none'}")
     log("=" * 50)
 
