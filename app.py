@@ -15,6 +15,11 @@ else:
 CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data.db"
 
+# v1.1: Auto-update check against GitHub releases.
+APP_VERSION = "1.1"
+GITHUB_REPO = "magnificolv/RocketTracker"
+GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
 app = Flask(__name__, static_folder="dashboard", static_url_path="")
 
 @app.after_request
@@ -158,7 +163,64 @@ def player_config():
 @app.route("/api/status")
 def api_status():
     c = load_config()
-    return jsonify({"ok": True, "app": "RL Tracker v1.0.7", "version": "1.0.7", "player_configured": bool(c.get("player", {}).get("name"))})
+    return jsonify({"ok": True, "app": f"RL Tracker v{APP_VERSION}", "version": APP_VERSION, "player_configured": bool(c.get("player", {}).get("name"))})
+
+# ====== v1.1: Auto-update check ======
+def _parse_semver(v):
+    """Parse 'v1.0.9' / '1.1' / '1.0.9-rc1' into a tuple of ints for comparison.
+    Non-numeric suffixes are stripped, so '1.0.9-rc1' == '1.0.9' numerically."""
+    s = str(v).strip().lstrip("vV")
+    parts = []
+    for p in s.split("."):
+        num = ""
+        for ch in p:
+            if ch.isdigit(): num += ch
+            else: break
+        parts.append(int(num) if num else 0)
+    return tuple(parts)
+
+@app.route("/api/check-update")
+def check_update():
+    """v1.1: Compare the running APP_VERSION against the latest GitHub release.
+    Uses stdlib urllib so PyInstaller builds need no extra deps. Returns 200
+    with structured JSON even on failure so the frontend can render a friendly
+    message instead of a generic fetch error."""
+    import urllib.request, urllib.error
+    try:
+        req = urllib.request.Request(GITHUB_RELEASES_API, headers={
+            "User-Agent": f"RocketTracker/{APP_VERSION}",
+            "Accept": "application/vnd.github+json",
+        })
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return jsonify({"ok": False, "error": f"GitHub API returned HTTP {e.code}", "current": APP_VERSION})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Cannot reach GitHub ({e.__class__.__name__})", "current": APP_VERSION})
+
+    tag = data.get("tag_name", "") or ""          # e.g. "v1.0.9"
+    latest = tag.lstrip("vV")
+    # Prefer the .zip asset (portable distribution); fall back to the release page.
+    download_url = None
+    for a in data.get("assets", []) or []:
+        if (a.get("name") or "").lower().endswith(".zip"):
+            download_url = a.get("browser_download_url"); break
+    if not download_url:
+        download_url = data.get("html_url")
+
+    return jsonify({
+        "ok": True,
+        "current": APP_VERSION,
+        "latest": latest,
+        "latest_tag": tag,
+        "update_available": _parse_semver(latest) > _parse_semver(APP_VERSION),
+        "release_name": data.get("name") or tag,
+        "release_url": data.get("html_url"),
+        "download_url": download_url,
+        "release_notes": data.get("body") or "",
+        "published_at": data.get("published_at"),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    })
 
 @app.route("/api/rl-config", methods=["GET"])
 def rl_config_status():

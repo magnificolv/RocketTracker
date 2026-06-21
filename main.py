@@ -7,6 +7,17 @@ Starts FAST TCP listener (thread) + Flask web server.
 import os, sys, threading, webbrowser, time
 from pathlib import Path
 
+# Waitress: production-grade pure-Python WSGI server. Replaces Flask's dev
+# server (which prints "Do not use in a production environment" and freezes
+# the dashboard during slow /api/rl-diagnostics calls). Waitress is
+# PyInstaller-friendly and has no native deps.
+try:
+    from waitress import serve as _wsgi_serve
+    _HAS_WAITRESS = True
+except ImportError:
+    _wsgi_serve = None
+    _HAS_WAITRESS = False
+
 if sys.platform == "win32":
     try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     except Exception: pass
@@ -24,7 +35,7 @@ from listener import run_listener, ensure_tastatsapi_ini
 
 def main():
     print("=" * 50)
-    print("  🚀 Rocket League Tracker v1.0.7")
+    print("  🚀 Rocket League Tracker v1.1")
     print(f"  📁 {BASE_DIR}")
     print("=" * 50)
 
@@ -61,7 +72,12 @@ def main():
     print(f"  🌐 Dashboard -> http://localhost:{port}")
     print("=" * 50)
     print("  Press Ctrl+C to exit (or use ⏻ button in dashboard)")
-    app.run(host="127.0.0.1", port=port, debug=False)
+    if _wsgi_serve is not None:
+        print(f"  🟢 Waitress WSGI server (4 threads)")
+        _wsgi_serve(app, host="127.0.0.1", port=port, threads=4)
+    else:
+        print("  ⚠️  Waitress not installed — falling back to Flask dev server")
+        app.run(host="127.0.0.1", port=port, debug=False)
     stop_event.set()
     print("👋 Shutting down...")
 
