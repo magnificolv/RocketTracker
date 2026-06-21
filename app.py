@@ -198,6 +198,7 @@ def rl_diagnostics():
         "config_dir_path": None,
         "ini_exists": False,
         "ini_correct": False,
+        "ini_read_by_rl": False,
         "ini_full_content": None,
         "port_49123_open": False,
         "port_49123_error": None,
@@ -225,6 +226,7 @@ def rl_diagnostics():
                     and "Port=49123" in content
                     and "PacketSendRate=30" in content
                 )
+                diag["ini_read_by_rl"] = "[IniVersion]" in content
             except Exception as e:
                 diag["ini_correct"] = False
                 diag["ini_full_content"] = f"(read error: {e})"
@@ -279,7 +281,10 @@ def rl_diagnostics():
     if diag["ini_exists"] and not diag["ini_correct"]:
         sugg.append("⚠️ TAStatsAPI.ini exists but its content is wrong (needs Port=49123 + PacketSendRate=30 under [TAGame.MatchStatsExporter_TA]). Open Settings → '📝 Auto-Create' to fix it, then restart Rocket League.")
     if diag["ini_exists"] and diag["ini_correct"] and not diag["port_49123_open"]:
-        sugg.append("🔄 TAStatsAPI.ini is correct but port 49123 is still closed. Fully QUIT Rocket League (not just minimize — close it completely) and launch it again. RL reads TAStatsAPI.ini only at startup.")
+        if not diag["ini_read_by_rl"]:
+            sugg.append("⚠️ FATAL: TAStatsAPI.ini is correct but Rocket League has NEVER read it ([IniVersion] missing). RL reads TAStatsAPI.ini ONLY at startup. You MUST fully quit Rocket League (close completely) and launch it again. Auto-Create was probably clicked while RL was already running.")
+        else:
+            sugg.append("🔄 TAStatsAPI.ini is correct and RL has read it before ([IniVersion] present) but port 49123 is now closed. Fully quit RL and restart it. If still closed, check Windows Firewall or antivirus.")
     if diag["rl_process_running"] and not diag["port_49123_open"] and diag["ini_correct"]:
         sugg.append("🛡️ RL is running and the INI is correct, but the port is closed. Likely causes: (a) RL was started BEFORE the INI was created — restart RL; (b) Windows Firewall is blocking localhost:49123 — allow RocketLeague.exe through; (c) another RL config file is overriding TAStatsAPI.ini.")
     if not diag["rl_process_running"] and not diag["port_49123_open"]:

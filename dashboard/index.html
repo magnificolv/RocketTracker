@@ -165,6 +165,10 @@ async function runDiagnostics(){
   if(d.ini_exists){
     checks.push({label:'TAStatsAPI.ini content correct',ok:d.ini_correct,detail:d.ini_correct?'Port=49123 + PacketSendRate=30 + correct section':'Content is wrong — click 📝 Auto-Create to fix'});
   }
+  // INI read by RL ([IniVersion] check)
+  if(d.ini_exists && d.ini_correct){
+    checks.push({label:'RL has read TAStatsAPI.ini',ok:d.ini_read_by_rl,detail:d.ini_read_by_rl?'[IniVersion] present — RL has processed this file':'⚠️ [IniVersion] MISSING! RL has NEVER read this file. Click 📝 Auto-Create → RESTART RL!'});
+  }
   // RL running
   checks.push({label:'Rocket League running',ok:d.rl_process_running,detail:d.rl_process_running?('Found: '+(d.rl_processes_found.join(', ')||'yes')):'No RocketLeague.exe process detected'});
   // Port open
