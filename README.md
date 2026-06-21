@@ -25,7 +25,7 @@
 <br>
 
 <a href="https://github.com/magnificolv/RocketTracker/releases/latest">
-  <img src="https://img.shields.io/badge/⬇️%20DOWNLOAD-v1.0.5%20ZIP-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.0.5 ZIP" height="62">
+  <img src="https://img.shields.io/badge/⬇️%20DOWNLOAD-v1.1.2%20ZIP-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.1.2 ZIP" height="62">
 </a>
 
 <br><br>
@@ -80,9 +80,9 @@
 
 ## 🚀 Quick Start
 
-1. **Download** → [**RL-Tracker-v1.0.5.zip**](https://github.com/magnificolv/RocketTracker/releases/latest) (~13 MB)
+1. **Download** → [**RL-Tracker-v1.1.2.zip**](https://github.com/magnificolv/RocketTracker/releases/latest) (~13 MB)
 2. **Extract** → Right-click the ZIP → **Extract All…** → Choose your **Desktop**
-3. **Launch** → Open `RL-Tracker\` → double-click `RL-Tracker-v1.0.5.exe`
+3. **Launch** → Open `RL-Tracker\` → double-click `RL-Tracker-v1.1.2.exe`
 4. **Play** → Enter your name in ⚙️ Settings → launch Rocket League → stats appear automatically 🎉
 
 > 💡 **First time?** Click **Auto-Create** in Settings to set up the Stats API config. Restart RL once.
@@ -106,7 +106,7 @@ The .exe is unsigned, so Defender may flag it. This is a **false positive** — 
 ## 👥 For Friends
 
 1. **Download** the [ZIP](https://github.com/magnificolv/RocketTracker/releases/latest) and **extract** it to your Desktop
-2. **Double-click** `RL-Tracker-v1.0.5.exe` inside the `RL-Tracker\` folder, then enter YOUR Rocket League name in ⚙️ Settings
+2. **Double-click** `RL-Tracker-v1.1.2.exe` inside the `RL-Tracker\` folder, then enter YOUR Rocket League name in ⚙️ Settings
 3. Click **Auto-Create**, restart Rocket League, and play! 🎉
 
 > ⚠️ **Important:** Run the .exe **from inside the `RL-Tracker\` folder**. Moving it elsewhere scatters your data files.
@@ -138,6 +138,7 @@ All files are created **inside the `RL-Tracker\` folder** automatically — noth
 
 | Version | Date | Changes |
 |:-------:|:----:|---------|
+| **v1.1.2** | Jun 21 | **README fix + diagnostic accuracy.** Updated stale v1.0.5 references in README (download button, Quick Start, For Friends) to v1.1.2. Fixed three false-positive ❌ errors in diagnostics: DefaultStatsAPI.ini install-dir is only ⚠️ when Documents/TAStatsAPI.ini is correct; VPN/TUN adapters only show ❌ when actually holding port 49123 (otherwise ℹ️); .wslconfig ignoredPorts missing only flags ❌ when WSL relay IS holding the port. Added scroll support to the diagnostic results panel for small screens. |
 | **v1.1.1** | Jun 21 | **Wall Time 0% fix.** The ground/wall/air tick classifier in `listener.py` checked `bOnGround` before `bOnWall`, but Rocket League reports BOTH as `True` simultaneously when driving on the wall (the wall is world geometry, so ≥3 wheels touching it satisfies `bOnGround`). The old `if/elif` therefore swallowed every wall tick into `on_ground_ticks` and `on_wall_ticks` stayed 0 → Wall Time always showed 0%. Fix: check `bOnWall` first, making the three states mutually exclusive in the order wall > ground > air. Confirmed against the official RL Stats API docs (`bOnWall` is a valid SPECTATOR field — the original "field doesn't exist" hypothesis was wrong; it was a precedence bug, not a missing-field bug). |
 | **v1.1** | Jun 21 | **Auto-update check.** New `/api/check-update` endpoint queries the GitHub releases API and compares the running version against the latest published release using semver. Settings modal gets a "🔄 Auto-Update" section with a "Check for Updates" button that shows the latest version, release notes, publish date, and a one-click download link to the new `.zip` asset. On page load the dashboard silently checks in the background and surfaces an "● Update available" badge next to the version number if a newer release exists. Uses stdlib `urllib` (no new deps, PyInstaller-safe). |
 | **v1.0.9** | Jun 21 | **Flask → Waitress WSGI server.** Replaces Flask's single-threaded dev server (which prints "Do not use in a production environment" and freezes the dashboard during slow `/api/rl-diagnostics` calls) with Waitress — a production-grade pure-Python WSGI server (4 threads). No more silent 500s or UI lockups during diagnostics. Falls back to Flask automatically if Waitress is missing. **Dashboard layout fix:** Ground Time and Wall Time cards in the Movement & Boost section now render inside the 4-column grid as matching square cards (blue / orange) instead of orphan full-width divs. Fixed in both the all-time Stats view and the per-Session Deep Stats view. |

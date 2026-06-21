@@ -47,6 +47,7 @@ body{font-family:var(--font);background:var(--bg-primary);background-image:url('
 .stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center}
 .stat-card h4{color:var(--text-muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .stat-card .big-number{font-size:2.2rem;font-weight:800;background:linear-gradient(135deg,var(--blue),#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#diag-results{max-height:380px;overflow-y:auto}
 .winrate-bar{margin-top:10px;height:6px;border-radius:3px;background:var(--red-glow);overflow:hidden}
 .winrate-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--green),#22c55e);transition:width .6s}
 .recent-form{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}
@@ -76,7 +77,7 @@ body{font-family:var(--font);background:var(--bg-primary);background-image:url('
 
 <div class="listener-bar"><div class="dot dot-off" id="listener-dot"></div><span id="listener-msg">Auto-tracker: not running</span></div>
 
-<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">Portable Edition v1.1 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:600;font-size:.72rem">● Update available</span></p></div>
+<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">Portable Edition v1.1.2 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:600;font-size:.72rem">● Update available</span></p></div>
 
 <nav class="nav"><button class="nav-btn active" data-tab="active-session">🎮 Active Session</button><button class="nav-btn" data-tab="history">📋 History</button><button class="nav-btn" data-tab="stats">📊 Stats</button></nav>
 
@@ -228,6 +229,14 @@ async function runDiagnostics(){
   checks.push({label:'Rocket League running',ok:d.rl_process_running,detail:d.rl_process_running?('Found: '+(d.rl_processes_found.join(', ')||'yes')):'No RocketLeague.exe process detected'});
   // Port open
   checks.push({label:'Port 49123 reachable (IPv4 127.0.0.1)',ok:d.port_49123_open,detail:d.port_49123_open?'Open — Stats API is responding':(d.port_49123_error||'Closed')});
+  // v1.1.2: only flag VPN as ❌ if it's actually blocking (port closed + timeout = filter driver)
+  const vpnBlocking = d.vpn_adapters && d.vpn_adapters.length > 0 && !d.port_49123_open && d.port_49123_error_class === 'timeout';
+  if(d.vpn_adapters){
+    const vpnDetail = d.vpn_adapters.length
+      ? d.vpn_adapters.join('; ') + (vpnBlocking ? ' — likely blocking 49123' : ' — present but not proven blocking')
+      : 'None detected';
+    checks.push({label:'VPN/TUN adapters',ok:!vpnBlocking,detail:vpnDetail, severity:vpnBlocking ? 'error' : 'info'});
+  }
   // Error class (v1.0.6) — Timeout vs Refused is the key diagnostic signal
   if(!d.port_49123_open && d.port_49123_error_class){
     const ecLabel={timeout:'⏱️ TIMEOUT (filter driver drops SYN)',refused:'✋ REFUSED (no listener)',other:'❓ Other error'}[d.port_49123_error_class]||d.port_49123_error_class;
@@ -241,10 +250,6 @@ async function runDiagnostics(){
   if(!d.port_49123_open){
     const ns=d.netstat_listeners&&d.netstat_listeners.length?d.netstat_listeners.join('; '):'None — no process is listening on 49123';
     checks.push({label:'netstat listener on 49123',ok:d.netstat_listeners&&d.netstat_listeners.length>0,detail:ns});
-  }
-  // VPN adapters (v1.0.6) — top cause of TimeoutError on localhost
-  if(d.vpn_adapters){
-    checks.push({label:'VPN/TUN adapters',ok:d.vpn_adapters.length===0,detail:d.vpn_adapters.length?d.vpn_adapters.join('; '):'None detected'});
   }
   // v1.0.7: WSL2 port-forwarding interference (the new primary hypothesis)
   if(d.wsl_installed!==undefined){
@@ -260,7 +265,9 @@ async function runDiagnostics(){
     }else{
       wslDetail='WSL2 not installed (wsl.exe not on PATH). WSL2 port-relay interference ruled out.';
     }
-    checks.push({label:'WSL2 port-relay interference',ok:wslOk,detail:wslDetail});
+    checks.push({label:'WSL2 port-relay interference',ok:wslOk,detail:wslDetail,
+      severity: d.wsl_relay_holding_49123 ? 'error' : (d.wsl_installed && d.wsl_running_distros && d.wsl_running_distros.length > 0 ? 'info' : 'ok')
+    });
   }
   // v1.0.7: Process actually holding port 49123 (resolved from netstat PID)
   if(!d.port_49123_open && d.netstat_49123_processes && d.netstat_49123_processes.length){
@@ -278,7 +285,9 @@ async function runDiagnostics(){
       const ip=d.wsl_ignored_ports&&d.wsl_ignored_ports.length?d.wsl_ignored_ports.join(', '):'(none)';
       excDetail=`.wslconfig exists at ${d.wsl_config_path} but 49123 is NOT in ignoredPorts (currently: ${ip}). Add ignoredPorts=49123 under [wsl2].`;
     }
-    checks.push({label:'.wslconfig ignoredPorts=49123',ok:excOk,detail:excDetail});
+    // v1.1.2: only flag as error if WSL relay is actually holding the port
+    const excSeverity = d.wsl_relay_holding_49123 ? 'error' : 'warning';
+    checks.push({label:'.wslconfig ignoredPorts=49123',ok:excOk,detail:excDetail, severity: d.wsl_relay_holding_49123 && !excOk ? 'error' : (excOk ? 'ok' : 'warning') });
   }
   // v1.0.7: Windows reserved port range (Hyper-V/Docker can reserve 49123)
   if(d.port_49123_excluded!==undefined){
@@ -293,16 +302,25 @@ async function runDiagnostics(){
     }
     checks.push({label:'Windows reserved port range',ok:excRangeOk,detail:excRangeDetail});
   }
-  // DefaultStatsAPI.ini (official Psyonix install-dir location)
+  // v1.1.2: DefaultStatsAPI.ini — only warning if Documents TAStatsAPI.ini is correct
+  // The Documents TAStatsAPI.ini OVERRIDES the install-dir DefaultStatsAPI.ini
   if(d.rl_install_dir){
-    checks.push({label:'DefaultStatsAPI.ini (install dir)',ok:d.default_stats_ini_exists&&d.default_stats_ini_correct,detail:d.default_stats_ini_exists?(d.default_stats_ini_correct?'Correct':'Wrong content — '+d.default_stats_ini_path):'MISSING — see suggestions'});
+    const dsExists = d.default_stats_ini_exists;
+    const dsCorrect = d.default_stats_ini_correct;
+    const docsCorrect = d.ini_exists && d.ini_correct;
+    // Only error if Documents INI is ALSO wrong/missing — otherwise just warning
+    const dsSeverity = docsCorrect ? 'warning' : 'error';
+    checks.push({label:'DefaultStatsAPI.ini (install dir)',ok:dsExists&&dsCorrect, detail:dsExists?(dsCorrect?'Correct':'Wrong content — '+d.default_stats_ini_path):'MISSING — see suggestions', severity: dsExists && dsCorrect ? 'ok' : (docsCorrect ? 'warning' : 'error') });
   }
 
   let html='<div style="font-weight:700;margin-bottom:10px;color:var(--text-primary)">🔍 Diagnostic Results</div>';
   html+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
   checks.forEach(c=>{
-    const icon=c.ok?'✅':'❌';
-    const color=c.ok?'var(--green)':'var(--red)';
+    const sev = c.severity || (c.ok ? 'ok' : 'error');
+    const iconMap = {ok:'✅', warning:'⚠️', info:'ℹ️', ignored:'✅', error:'❌'};
+    const colorMap = {ok:'var(--green)', warning:'#fbbf24', info:'var(--blue)', ignored:'var(--text-muted)', error:'var(--red)'};
+    const icon = iconMap[sev] || (c.ok?'✅':'❌');
+    const color = colorMap[sev] || (c.ok?'var(--green)':'var(--red)');
     html+='<div style="display:flex;gap:8px;align-items:flex-start"><span style="flex-shrink:0">'+icon+'</span><div><span style="color:'+color+';font-weight:600">'+c.label+'</span><br><span style="color:var(--text-muted);font-size:.72rem;word-break:break-all">'+c.detail+'</span></div></div>';
   });
   html+='</div>';
