@@ -158,7 +158,7 @@ def player_config():
 @app.route("/api/status")
 def api_status():
     c = load_config()
-    return jsonify({"ok": True, "app": "RL Tracker v1.0.5", "version": "1.0.5", "player_configured": bool(c.get("player", {}).get("name"))})
+    return jsonify({"ok": True, "app": "RL Tracker v1.0.6", "version": "1.0.6", "player_configured": bool(c.get("player", {}).get("name"))})
 
 @app.route("/api/rl-config", methods=["GET"])
 def rl_config_status():
@@ -180,17 +180,89 @@ def rl_config_create():
     return jsonify({"created": ok, "message": "TAStatsAPI.ini created" if ok else "Could not create"})
 
 
+def _run_cmd(args, timeout=5):
+    """Run a subprocess, return stdout string. Never raises."""
+    import subprocess as _sp
+    try:
+        r = _sp.run(args, capture_output=True, text=True, timeout=timeout)
+        return (r.stdout or "") + (r.stderr or "")
+    except Exception:
+        return ""
+
+
+def _find_rl_install_dir():
+    """Locate the Rocket League install directory.
+
+    Tries (1) the ExecutablePath of a running RocketLeague.exe via wmic,
+    (2) Steam steamapps libraryfolders, (3) Epic Games install records,
+    (4) common hardcoded paths. Returns a Path or None.
+    """
+    from pathlib import Path
+    # 1) Running process path (most reliable when RL is up)
+    if sys.platform == "win32":
+        out = _run_cmd(
+            ["wmic", "process", "where", "name='RocketLeague.exe'", "get", "ExecutablePath", "/format:list"],
+            timeout=4,
+        )
+        for line in out.splitlines():
+            line = line.strip()
+            if line.lower().endswith("rocketleague.exe"):
+                p = Path(line)
+                if p.exists():
+                    # bin -> .. -> TAGame/Config
+                    return p.parent.parent
+    # 2) Steam steamapps/common/rocketleague
+    candidates_steam = []
+    progfiles = _os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    candidates_steam.append(Path(progfiles) / "Steam" / "steamapps" / "common" / "rocketleague")
+    # Scan libraryfolders.vdf for additional Steam libraries
+    steam_cfg = Path(progfiles) / "Steam" / "steamapps" / "libraryfolders.vdf"
+    if steam_cfg.exists():
+        try:
+            txt = steam_cfg.read_text(encoding="utf-8", errors="replace")
+            import re as _re
+            for m in _re.finditer(r'"path"\s+"([^"]+)"', txt):
+                candidates_steam.append(Path(m.group(1).replace("\\\\", "\\")) / "steamapps" / "common" / "rocketleague")
+        except Exception:
+            pass
+    for c in candidates_steam:
+        if (c / "TAGame" / "Config").is_dir():
+            return c
+    # 3) Epic Games
+    epic_data = _os.environ.get("ProgramData", r"C:\ProgramData")
+    epic_installs = Path(epic_data) / "Epic" / "EpicGamesLauncher" / "Data" / "Manifests"
+    if epic_installs.is_dir():
+        try:
+            for mf in epic_installs.glob("*.item"):
+                txt = mf.read_text(encoding="utf-8", errors="replace")
+                if "Rocket League" in txt or "rocketleague" in txt.lower():
+                    import re as _re
+                    m = _re.search(r'"InstallLocation"\s+"([^"]+)"', txt)
+                    if m:
+                        p = Path(m.group(1).replace("\\\\", "\\"))
+                        if (p / "TAGame" / "Config").is_dir():
+                            return p
+        except Exception:
+            pass
+    # 4) Hardcoded fallbacks
+    for hard in [Path(progfiles) / "Epic Games" / "rocketleague",
+                 Path(_os.environ.get("ProgramFiles", r"C:\Program Files")) / "Epic Games" / "rocketleague"]:
+        if (hard / "TAGame" / "Config").is_dir():
+            return hard
+    return None
+
+
 @app.route("/api/rl-diagnostics")
 def rl_diagnostics():
-    """Comprehensive one-shot diagnostics for the "port 49123 closed" problem.
+    """Deep architecture diagnostics for the 'port 49123 closed' problem.
 
-    Returns everything a friend needs to self-diagnose without asking
-    Magnifico: which config dir was found, whether the INI exists and is
-    correct, whether port 49123 is reachable, whether RL is running, and a
-    concrete list of suggestions ordered by likelihood.
+    v1.0.6: distinguishes TimeoutError (filter driver drops SYN silently)
+    from ConnectionRefused (no listener), probes IPv6 ::1, runs netstat to
+    see what is actually bound, scans for VPN/TAP adapters that intercept
+    loopback traffic, and checks the install-dir DefaultStatsAPI.ini that
+    Psyonix's official docs actually reference.
     """
     import socket as _sock
-    import subprocess as _sp
     from listener import find_rl_config_candidates, find_rl_config_dir
 
     diag = {
@@ -202,13 +274,24 @@ def rl_diagnostics():
         "ini_full_content": None,
         "port_49123_open": False,
         "port_49123_error": None,
+        "port_49123_error_class": None,   # timeout | refused | other | none
+        "port_49123_ipv6_open": False,    # ::1 probe
+        "netstat_listeners": [],          # PIDs listening on 49123
         "rl_process_running": False,
         "rl_processes_found": [],
+        "rl_install_dir": None,
+        "default_stats_ini_exists": False,
+        "default_stats_ini_path": None,
+        "default_stats_ini_content": None,
+        "default_stats_ini_correct": False,
+        "vpn_adapters": [],               # suspicious filter-driver adapters
+        "all_adapters": [],               # raw adapter names for power users
         "suggestions": [],
         "alternative_paths_checked": [],
+        "diagnostics_version": "1.0.6",
     }
 
-    # --- Config dir + INI ---
+    # --- Config dir + INI (user Documents) ---
     candidates = find_rl_config_candidates()
     diag["alternative_paths_checked"] = [str(c) for c in candidates]
     cd = find_rl_config_dir()
@@ -231,38 +314,78 @@ def rl_diagnostics():
                 diag["ini_correct"] = False
                 diag["ini_full_content"] = f"(read error: {e})"
 
-    # --- Port 49123 check ---
+    # --- RL install dir + DefaultStatsAPI.ini (official Psyonix location) ---
+    install_dir = _find_rl_install_dir()
+    if install_dir:
+        diag["rl_install_dir"] = str(install_dir)
+        dsi = install_dir / "TAGame" / "Config" / "DefaultStatsAPI.ini"
+        diag["default_stats_ini_path"] = str(dsi)
+        diag["default_stats_ini_exists"] = dsi.exists()
+        if dsi.exists():
+            try:
+                dcontent = dsi.read_text(encoding="utf-8", errors="replace")
+                diag["default_stats_ini_content"] = dcontent
+                diag["default_stats_ini_correct"] = (
+                    "PacketSendRate=30" in dcontent
+                    and "Port=49123" in dcontent
+                )
+            except Exception as e:
+                diag["default_stats_ini_content"] = f"(read error: {e})"
+
+    # --- Port 49123 probe (IPv4 127.0.0.1) ---
     try:
         s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
         s.settimeout(2)
         s.connect(("127.0.0.1", 49123))
         s.close()
         diag["port_49123_open"] = True
+        diag["port_49123_error_class"] = "none"
+    except _sock.timeout:
+        diag["port_49123_open"] = False
+        diag["port_49123_error"] = "TimeoutError: [Errno 110] Connection timed out"
+        diag["port_49123_error_class"] = "timeout"
+    except ConnectionRefusedError as e:
+        diag["port_49123_open"] = False
+        diag["port_49123_error"] = f"ConnectionRefusedError: {e}"
+        diag["port_49123_error_class"] = "refused"
     except Exception as e:
         diag["port_49123_open"] = False
         diag["port_49123_error"] = f"{type(e).__name__}: {e}"
+        diag["port_49123_error_class"] = "other"
+
+    # --- IPv6 ::1 probe (RL may bind IPv6-only on some Windows configs) ---
+    try:
+        s6 = _sock.socket(_sock.AF_INET6, _sock.SOCK_STREAM)
+        s6.settimeout(2)
+        s6.connect(("::1", 49123))
+        s6.close()
+        diag["port_49123_ipv6_open"] = True
+    except Exception:
+        diag["port_49123_ipv6_open"] = False
+
+    # --- netstat: who is actually listening on 49123? ---
+    if sys.platform == "win32":
+        ns = _run_cmd(["netstat", "-ano", "-p", "TCP"], timeout=5)
+        for line in ns.splitlines():
+            ll = line.lower()
+            if ":49123" in ll and "listen" in ll:
+                diag["netstat_listeners"].append(line.strip())
 
     # --- Rocket League process check ---
     procs = []
     try:
         if sys.platform == "win32":
-            out = _sp.run(
-                ["tasklist", "/FO", "CSV", "/NH"],
-                capture_output=True, text=True, timeout=5
-            ).stdout
+            out = _run_cmd(["tasklist", "/FO", "CSV", "/NH"], timeout=5)
             for line in out.splitlines():
                 ll = line.lower()
                 if "rocketleague" in ll or "rocket league" in ll:
-                    # Extract the image name from the CSV line
                     try:
                         name = line.split('","')[0].strip('"')
                     except Exception:
                         name = line.split(",")[0].strip('"')
                     procs.append(name)
         else:
-            out = _sp.run(
-                ["ps", "-A"], capture_output=True, text=True, timeout=5
-            ).stdout
+            out = _run_cmd(["ps", "-A"], timeout=5)
             for line in out.splitlines():
                 ll = line.lower()
                 if "rocketleague" in ll or "rocket league" in ll:
@@ -272,29 +395,94 @@ def rl_diagnostics():
     diag["rl_process_running"] = len(procs) > 0
     diag["rl_processes_found"] = procs
 
-    # --- Suggestions (ordered by likelihood) ---
+    # --- VPN / filter-driver adapter scan ---
+    #   These adapters install WFP filters that can silently drop loopback
+    #   SYNs to 49123, producing TimeoutError instead of ConnectionRefused.
+    if sys.platform == "win32":
+        ga = _run_cmd(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-NetAdapter | Select-Object Name,InterfaceDescription,Status | Format-Table -AutoSize | Out-String -Width 256"],
+            timeout=6,
+        )
+        vpn_keywords = ("vpn", "tap", "tun", "wireguard", "nord", "express",
+                        "proton", "mullvad", "openvpn", "cisco", "anyconnect",
+                        "globalprotect", "zscaler", "forticlient", "sandboxie")
+        for line in ga.splitlines():
+            line_s = line.strip()
+            if not line_s or line_s.startswith("Name") or line_s.startswith("---"):
+                continue
+            diag["all_adapters"].append(line_s)
+            ll = line_s.lower()
+            if any(kw in ll for kw in vpn_keywords):
+                diag["vpn_adapters"].append(line_s)
+
+    # --- Suggestions (ordered by likelihood, keyed to error class) ---
     sugg = []
+    ec = diag["port_49123_error_class"]
+
     if not diag["config_dir_found"]:
         sugg.append("❌ RL config folder not found. Launch Rocket League at least once so it creates the Documents/My Games/Rocket League/TAGame/Config folder.")
+
     if diag["config_dir_found"] and not diag["ini_exists"]:
         sugg.append("⚠️ TAStatsAPI.ini is missing in the detected config folder. Open Settings → '📝 Auto-Create' to generate it, then restart Rocket League.")
+
     if diag["ini_exists"] and not diag["ini_correct"]:
         sugg.append("⚠️ TAStatsAPI.ini exists but its content is wrong (needs Port=49123 + PacketSendRate=30 under [TAGame.MatchStatsExporter_TA]). Open Settings → '📝 Auto-Create' to fix it, then restart Rocket League.")
-    if diag["ini_exists"] and diag["ini_correct"] and not diag["port_49123_open"]:
-        if not diag["ini_read_by_rl"]:
-            sugg.append("⚠️ FATAL: TAStatsAPI.ini is correct but Rocket League has NEVER read it ([IniVersion] missing). RL reads TAStatsAPI.ini ONLY at startup. You MUST fully quit Rocket League (close completely) and launch it again. Auto-Create was probably clicked while RL was already running.")
+
+    # TimeoutError-specific guidance (the friend's actual symptom)
+    if ec == "timeout":
+        sugg.append("⏱️ TIMEOUT (not ConnectionRefused) — something is silently dropping SYN packets to 127.0.0.1:49123. On localhost this is almost always a Windows Filtering Platform driver, NOT a missing listener. Top causes in order:")
+        if diag["vpn_adapters"]:
+            sugg.append(f"🚨 VPN/TUN adapter DETECTED: {'; '.join(diag['vpn_adapters'][:3])}. Fully QUIT the VPN app (system tray → Exit), then re-run diagnostics. Even disconnected VPNs leave filter drivers active that intercept loopback traffic.")
         else:
-            sugg.append("🔄 TAStatsAPI.ini is correct and RL has read it before ([IniVersion] present) but port 49123 is now closed. Fully quit RL and restart it. If still closed, check Windows Firewall or antivirus.")
+            sugg.append("1. VPN client installed? Check Windows system tray for NordVPN / ExpressVPN / ProtonVPN / Mullvad / WireGuard / Cisco AnyConnect / GlobalProtect / Zscaler. Fully EXIT it (not just disconnect) and re-test. Filter drivers stay loaded even when the VPN is 'off'.")
+        sugg.append("2. Windows Defender: open 'Windows Security' → 'App & browser control' → 'Smart App Control' (if enabled, disable). Also check 'Settings' → 'Privacy & security' → 'Windows Security' → 'Firewall & network protection' → 'Advanced settings' → 'Inbound Rules' for any rule blocking port 49123.")
+        sugg.append("3. Corporate / enterprise security (CrowdStrike, SentinelOne, Defender for Endpoint) — these install WFP filters that can drop loopback. Ask IT to whitelist 127.0.0.1:49123.")
+        sugg.append("4. Third-party firewall (even uninstalled AVs sometimes leave filter drivers). Run 'Get-NetAdapter' in PowerShell and look for any adapter you don't recognise.")
+        sugg.append("5. Restart the PC. WFP filters can get into a bad state that only a reboot clears.")
+
+    if ec == "refused":
+        sugg.append("✋ CONNECTION REFUSED — RL has not opened port 49123. The TCP stack is healthy (kernel sent RST). Focus on getting RL to actually read TAStatsAPI.ini and open the port:")
+        if not diag["ini_read_by_rl"]:
+            sugg.append("⚠️ FATAL: TAStatsAPI.ini is correct but Rocket League has NEVER read it ([IniVersion] missing). RL reads TAStatsAPI.ini ONLY at startup. Fully quit Rocket League (system tray → Exit, or Task Manager → End Task) and launch it again. Auto-Create was probably clicked while RL was already running.")
+        else:
+            sugg.append("🔄 TAStatsAPI.ini is correct and RL has read it before ([IniVersion] present) but port 49123 is closed right now. Causes: (a) RL was started BEFORE the INI was created — restart RL; (b) you are testing from the main menu — the Stats API only opens the port DURING a match (per Psyonix docs). Enter a freeplay/exhibition match and re-run diagnostics; (c) Steam Cloud reverted the INI — see below.")
+
+    # RL-running but port closed
     if diag["rl_process_running"] and not diag["port_49123_open"] and diag["ini_correct"]:
-        sugg.append("🛡️ RL is running and the INI is correct, but the port is closed. Likely causes: (a) RL was started BEFORE the INI was created — restart RL; (b) Windows Firewall is blocking localhost:49123 — allow RocketLeague.exe through; (c) another RL config file is overriding TAStatsAPI.ini.")
+        sugg.append("🛡️ RL is running and the INI is correct, but the port is closed. CRITICAL: the official Psyonix Stats API docs say the port opens 'during a match'. Enter an exhibition match or freeplay, THEN re-run diagnostics. If still closed in-match, see the Timeout/Refused guidance above.")
+
+    # RL not running
     if not diag["rl_process_running"] and not diag["port_49123_open"]:
-        sugg.append("🎮 Rocket League does not appear to be running. Launch it and enter a match — the Stats API only opens the port while the game is running.")
+        sugg.append("🎮 Rocket League does not appear to be running. Launch it, ENTER A MATCH (port only opens during matches per official docs), then re-run diagnostics.")
+
+    # DefaultStatsAPI.ini (official install-dir location)
+    if diag["rl_install_dir"] and not diag["default_stats_ini_exists"]:
+        sugg.append(f"📄 DefaultStatsAPI.ini is MISSING in the RL install dir ({diag['rl_install_dir']}\\TAGame\\Config\\). Psyonix's official docs reference THIS file, not the user-documents TAStatsAPI.ini. Create it there with the same [TAGame.MatchStatsExporter_TA] Port=49123 / PacketSendRate=30 content, then restart RL. (Magnifico's machine works with only TAStatsAPI.ini, so this is a fallback, but it has fixed the issue for some users.)")
+    elif diag["default_stats_ini_exists"] and not diag["default_stats_ini_correct"]:
+        sugg.append(f"⚠️ DefaultStatsAPI.ini EXISTS in the RL install dir but has wrong content (needs Port=49123 + PacketSendRate=30). Fix: {diag['default_stats_ini_path']}")
+
+    # IPv6-only bind hint
+    if not diag["port_49123_open"] and diag["port_49123_ipv6_open"]:
+        sugg.append("🌐 IPv4 127.0.0.1:49123 is closed but IPv6 [::1]:49123 is OPEN — RL has bound IPv6-only. This is rare but happens on some Windows configs with Hyper-V/WSL2. Tell Magnifico (the tracker currently only dials 127.0.0.1).")
+
+    # Steam Cloud warning (Steam version only — heuristic: Steam install dir found)
+    if diag["rl_install_dir"] and "steamapps" in diag["rl_install_dir"].lower():
+        sugg.append("☁️ Steam install detected. Steam Cloud syncs the Documents\\My Games\\Rocket League folder and can silently revert TAStatsAPI.ini to an older version on every RL launch. Fix: in Steam → Rocket League → Properties → General → DISABLE 'Keep games saves in the Steam Cloud'. Then re-create the INI and restart RL.")
+
     # OneDrive / alt-path hint
     if diag["config_dir_found"]:
         existing = diag["config_dir_path"]
         others = [p for p in diag["alternative_paths_checked"] if p != existing]
         if others:
             sugg.append(f"ℹ️ Config found at: {existing}. Also checked {len(others)} other location(s) (e.g. OneDrive Documents). If RL still won't open the port, the INI may need to live in one of those — copy TAStatsAPI.ini there too and restart RL.")
+
+    # netstat hint
+    if not diag["port_49123_open"] and diag["netstat_listeners"]:
+        sugg.append(f"🔍 netstat reports a listener on 49123: {diag['netstat_listeners']}. But our probe still failed — this confirms a filter driver is dropping the SYN (the port IS open at the OS level, but something intercepts the connect). See the Timeout guidance above.")
+    elif not diag["port_49123_open"] and not diag["netstat_listeners"] and ec == "timeout":
+        sugg.append("🔍 netstat reports NO listener on 49123 yet the probe TIMED OUT (instead of refused). This is unusual — a filter driver is dropping SYNs even though nothing is listening. Reboot the PC and re-test; if it persists, the WFP stack needs resetting ('netsh winsock reset' in an admin PowerShell, then reboot).")
+
     if not sugg:
         sugg.append("✅ Everything looks good! Port 49123 is open and the INI is correct. You should be tracked automatically.")
     diag["suggestions"] = sugg

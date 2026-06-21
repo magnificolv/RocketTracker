@@ -76,7 +76,7 @@ body{font-family:var(--font);background:var(--bg-primary);background-image:url('
 
 <div class="listener-bar"><div class="dot dot-off" id="listener-dot"></div><span id="listener-msg">Auto-tracker: not running</span></div>
 
-<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">Portable Edition v1.0.5</p></div>
+<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">Portable Edition v1.0.6</p></div>
 
 <nav class="nav"><button class="nav-btn active" data-tab="active-session">🎮 Active Session</button><button class="nav-btn" data-tab="history">📋 History</button><button class="nav-btn" data-tab="stats">📊 Stats</button></nav>
 
@@ -172,7 +172,29 @@ async function runDiagnostics(){
   // RL running
   checks.push({label:'Rocket League running',ok:d.rl_process_running,detail:d.rl_process_running?('Found: '+(d.rl_processes_found.join(', ')||'yes')):'No RocketLeague.exe process detected'});
   // Port open
-  checks.push({label:'Port 49123 reachable',ok:d.port_49123_open,detail:d.port_49123_open?'Open — Stats API is responding':(d.port_49123_error||'Closed')});
+  checks.push({label:'Port 49123 reachable (IPv4 127.0.0.1)',ok:d.port_49123_open,detail:d.port_49123_open?'Open — Stats API is responding':(d.port_49123_error||'Closed')});
+  // Error class (v1.0.6) — Timeout vs Refused is the key diagnostic signal
+  if(!d.port_49123_open && d.port_49123_error_class){
+    const ecLabel={timeout:'⏱️ TIMEOUT (filter driver drops SYN)',refused:'✋ REFUSED (no listener)',other:'❓ Other error'}[d.port_49123_error_class]||d.port_49123_error_class;
+    checks.push({label:'Error class',ok:false,detail:ecLabel+' — see suggestions below for class-specific fixes'});
+  }
+  // IPv6 probe
+  if(!d.port_49123_open){
+    checks.push({label:'IPv6 [::1]:49123 probe',ok:d.port_49123_ipv6_open,detail:d.port_49123_ipv6_open?'OPEN — RL bound IPv6-only (tracker dials IPv4, tell Magnifico)':'Closed (or refused) — IPv6 not the issue'});
+  }
+  // netstat listeners
+  if(!d.port_49123_open){
+    const ns=d.netstat_listeners&&d.netstat_listeners.length?d.netstat_listeners.join('; '):'None — no process is listening on 49123';
+    checks.push({label:'netstat listener on 49123',ok:d.netstat_listeners&&d.netstat_listeners.length>0,detail:ns});
+  }
+  // VPN adapters (v1.0.6) — top cause of TimeoutError on localhost
+  if(d.vpn_adapters){
+    checks.push({label:'VPN/TUN adapters',ok:d.vpn_adapters.length===0,detail:d.vpn_adapters.length?d.vpn_adapters.join('; '):'None detected'});
+  }
+  // DefaultStatsAPI.ini (official Psyonix install-dir location)
+  if(d.rl_install_dir){
+    checks.push({label:'DefaultStatsAPI.ini (install dir)',ok:d.default_stats_ini_exists&&d.default_stats_ini_correct,detail:d.default_stats_ini_exists?(d.default_stats_ini_correct?'Correct':'Wrong content — '+d.default_stats_ini_path):'MISSING — see suggestions'});
+  }
 
   let html='<div style="font-weight:700;margin-bottom:10px;color:var(--text-primary)">🔍 Diagnostic Results</div>';
   html+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
@@ -192,10 +214,13 @@ async function runDiagnostics(){
   }
 
   // Collapsible: INI content + alt paths (for power users / sharing with Magnifico)
-  html+='<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text-muted);font-size:.72rem">📋 Technical details (INI content + paths checked)</summary>';
+  html+='<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text-muted);font-size:.72rem">📋 Technical details (INI content + paths + adapters)</summary>';
   html+='<div style="margin-top:8px;font-size:.7rem;color:var(--text-muted)">';
-  html+='<div style="margin-bottom:6px"><b>Paths checked:</b><br>'+d.alternative_paths_checked.map(p=>'• '+p+(p===d.config_dir_path?' ✅ (used)':'')).join('<br>')+'</div>';
+  if(d.rl_install_dir){html+='<div style="margin-bottom:6px"><b>RL install dir:</b> '+d.rl_install_dir+'</div>'}
+  if(d.all_adapters&&d.all_adapters.length){html+='<div style="margin-bottom:6px"><b>All network adapters:</b><br>'+d.all_adapters.map(a=>'• '+a).join('<br>')+'</div>'}
+  html+='<div style="margin-bottom:6px"><b>Paths checked (user config):</b><br>'+d.alternative_paths_checked.map(p=>'• '+p+(p===d.config_dir_path?' ✅ (used)':'')).join('<br>')+'</div>';
   if(d.ini_full_content){html+='<div style="margin-bottom:6px"><b>TAStatsAPI.ini content:</b><pre style="white-space:pre-wrap;background:var(--bg-input);padding:8px;border-radius:6px;margin-top:4px">'+d.ini_full_content.replace(/</g,'&lt;')+'</pre></div>'}
+  if(d.default_stats_ini_content){html+='<div style="margin-bottom:6px"><b>DefaultStatsAPI.ini content (install dir):</b><pre style="white-space:pre-wrap;background:var(--bg-input);padding:8px;border-radius:6px;margin-top:4px">'+d.default_stats_ini_content.replace(/</g,'&lt;')+'</pre></div>'}
   html+='</div></details>';
 
   box.innerHTML=html;
