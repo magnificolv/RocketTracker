@@ -20,7 +20,7 @@ if sys.platform == "win32":
         pass
 
 BASE_DIR = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
-DB_PATH = BASE_DIR / "data.db"
+DB_PATH = BASE_DIR / "data-v2.db"
 CONFIG_PATH = BASE_DIR / "config.yaml"
 LOG_PATH = BASE_DIR / "listener.log"
 STATUS_PATH = BASE_DIR / "listener_status.json"

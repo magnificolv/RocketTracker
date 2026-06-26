@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import yaml
 from flask import Flask, jsonify, request, send_from_directory
+from coach import CoachEngine
 
 # DB persistence: store next to exe
 if getattr(sys, 'frozen', False):
@@ -16,6 +17,10 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data.db"
 
 app = Flask(__name__, static_folder="dashboard", static_url_path="")
+
+import os
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data-v2.db")
+coach = CoachEngine(DB_PATH)
 
 @app.after_request
 def cors(r):
@@ -149,7 +154,7 @@ def player_config():
 @app.route("/api/status")
 def api_status():
     c = load_config()
-    return jsonify({"ok": True, "app": "RL Tracker v1.0", "version": "1.0.0", "player_configured": bool(c.get("player", {}).get("name"))})
+    return jsonify({"ok": True, "app": "RL Tracker v1.0", "version": "2.0.0-dev", "player_configured": bool(c.get("player", {}).get("name"))})
 
 @app.route("/api/rl-config", methods=["GET"])
 def rl_config_status():
@@ -205,3 +210,11 @@ def quit_tracker():
     def _exit(): import time as _t; _t.sleep(0.5); _os._exit(0)
     _th.Thread(target=_exit, daemon=True).start()
     return jsonify({"shutdown": True, "message": "Tracker shutting down..."})
+
+@app.route("/api/coach/match/<int:match_id>")
+def coach_match(match_id):
+    return jsonify(coach.analyze_match(match_id))
+
+@app.route("/api/coach/records")
+def coach_records():
+    return jsonify(coach.get_all_records())
