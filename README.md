@@ -20,7 +20,7 @@
 <div align="center">
 
 <a href="https://github.com/magnificolv/RocketTracker/releases/latest">
-  <img src="https://img.shields.io/badge/⬇️%20DOWNLOAD%20v1.3.0-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.3.0" height="56">
+  <img src="https://img.shields.io/badge/⬇️%20DOWNLOAD%20v1.3.1-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.3.1" height="56">
 </a>
 
 <br><sub>📦 Download ZIP → Extract to Desktop → Double-click → Play</sub>
@@ -69,7 +69,7 @@
 
 1. **Download** the [latest ZIP](https://github.com/magnificolv/RocketTracker/releases/latest) (~13 MB)
 2. **Extract** to your Desktop — keep the `RL-Tracker\` folder together, don't move the .exe out
-3. **Double-click** `RL-Tracker-v1.3.0.exe` — a console window opens, your browser opens the dashboard at `http://localhost:3010`
+3. **Double-click** `RL-Tracker-v1.3.1.exe` — a console window opens, your browser opens the dashboard at `http://localhost:3010`
 4. **Enter your name** in ⚙️ Settings → click **Auto-Create** → restart Rocket League → play!
 
 > 💡 First time? Auto-Create sets up everything automatically. Just restart RL once.
@@ -99,6 +99,7 @@ The tracker checks GitHub for new versions. When an update is available, you'll 
 
 | Version | Date | Changes |
 |:-------:|:----:|---------|
+| **v1.3.1** | Jun 26 | Team detection confirmation fix — waits for 3 consistent ticks before locking team, eliminating the team-swap bug that inverted match results. |
 | **v1.3.0** | Jun 21 | Auto-Create now fixes **both** INI files (including install-dir DefaultStatsAPI.ini that RL reverts to PacketSendRate=0). Copy All diagnostics button. |
 | **v1.2.0** | Jun 21 | New icon, seamless one-click auto-update |
 | **v1.1.0** | Jun 21 | Auto-update check from GitHub |

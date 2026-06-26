@@ -211,7 +211,8 @@ class MatchState:
                  'boosting_ticks', 'supersonic_ticks',
                  'on_ground_ticks', 'in_air_ticks', 'on_wall_ticks',
                  '_match_recorded', '_player_cache', '_friend_cache',
-                 '_prev_demos', '_was_demolished')
+                 '_prev_demos', '_was_demolished',
+                 '_team_confirm_count', '_team_confirm_candidate')
 
     def __init__(self, player_name, friend_names):
         self.player_name = player_name.lower().strip()
@@ -219,6 +220,8 @@ class MatchState:
         self._player_cache = {}  # {name_hash: result} for fast lookups
         self._friend_cache = set(f.lower().strip() for f in friend_names if f.strip())
         self._match_recorded = False
+        self._team_confirm_count = 0
+        self._team_confirm_candidate = None
         self.reset()
 
     def reset(self):
@@ -240,6 +243,8 @@ class MatchState:
         self._player_cache.clear()
         self._prev_demos = 0
         self._was_demolished = False
+        self._team_confirm_count = 0
+        self._team_confirm_candidate = None
 
     def _fast_find(self, players, target):
         """Two-pass player lookup. Pass 1: exact (case-insensitive) match
@@ -304,33 +309,40 @@ class MatchState:
         game = data.get("Game", {})
         self.tick_count += 1
 
-        # Player detection (only run until team is locked).
-        # FIX (v1.0.8): validate TeamNum is 0 or 1 BEFORE trusting it. RL's
-        # first UpdateState after a reset sometimes reports TeamNum=-1 or
-        # None; locking that in broke user_score/opponent_score for the whole
-        # match. Now we DEFER and retry next tick instead of locking bad data.
-        # Also logs "Team detected: N (Blue/Orange)" so a flip between matches
-        # is visible in listener.log.
+        # Player detection with TEAM CONFIRMATION (v1.3.1 fix).
+        # RL API sometimes reports incorrect TeamNum on early loading ticks.
+        # To avoid locking to the WRONG team for the entire match (inverting
+        # all scores and results), we now require 3 consecutive ticks with
+        # the SAME TeamNum before trusting it. This eliminates the team-swap
+        # bug that caused: Match 1 CORRECT, Matches 2+ INVERTED.
         if self.user_team_num is None and players:
             p = self._fast_find(players, self.player_name)
             if p:
                 tnum = p.get("TeamNum", -1)
                 if tnum in (0, 1):
-                    self.user_team_num = tnum
-                    team_name = "Blue" if tnum == 0 else "Orange"
-                    log(f"Team detected: {tnum} ({team_name})")
-                    log(f"FOUND PLAYER: {p.get('Name')} on Team {tnum} ({team_name}) [scores: {self.scores}]")
-                    update_status("connected", f"Live - tracking {p.get('Name')}", self.player_name)
-                    # Duo detection at lock time (also re-checked every tick below).
-                    # fp is not p: don't mark the user as their own duo partner.
-                    if self._friend_cache:
-                        for fp in players:
-                            if fp.get("TeamNum") == self.user_team_num and fp is not p:
-                                fpname = fp.get("Name", "").lower().strip()
-                                if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
-                                    self.mode = "duo"
-                                    log(f"Duo detected: {fp.get('Name')}")
-                                    break
+                    if tnum == self._team_confirm_candidate:
+                        self._team_confirm_count += 1
+                        if self._team_confirm_count >= 3:
+                            self.user_team_num = tnum
+                            team_name = "Blue" if tnum == 0 else "Orange"
+                            log(f"Team CONFIRMED after {self._team_confirm_count} ticks: {tnum} ({team_name})")
+                            log(f"FOUND PLAYER: {p.get('Name')} on Team {tnum} ({team_name}) [scores: {self.scores}]")
+                            update_status("connected", f"Live - tracking {p.get('Name')}", self.player_name)
+                            # Duo detection at lock time (also re-checked every tick below).
+                            if self._friend_cache:
+                                for fp in players:
+                                    if fp.get("TeamNum") == self.user_team_num and fp is not p:
+                                        fpname = fp.get("Name", "").lower().strip()
+                                        if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
+                                            self.mode = "duo"
+                                            log(f"Duo detected: {fp.get('Name')}")
+                                            break
+                    else:
+                        # TeamNum changed — reset confirmation counter
+                        team_name_new = "Blue" if tnum == 0 else "Orange"
+                        log(f"Team candidate CHANGED: {self._team_confirm_candidate} → {tnum} ({team_name_new}); resetting confirmation count")
+                        self._team_confirm_candidate = tnum
+                        self._team_confirm_count = 1
                 else:
                     log(f"DEFER detection: found '{p.get('Name')}' but TeamNum={tnum} (need 0 or 1); retrying next tick")
 
