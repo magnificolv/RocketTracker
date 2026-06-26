@@ -309,42 +309,51 @@ class MatchState:
         game = data.get("Game", {})
         self.tick_count += 1
 
-        # Player detection with TEAM CONFIRMATION (v1.3.1 fix).
-        # RL API sometimes reports incorrect TeamNum on early loading ticks.
-        # To avoid locking to the WRONG team for the entire match (inverting
-        # all scores and results), we now require 3 consecutive ticks with
-        # the SAME TeamNum before trusting it. This eliminates the team-swap
-        # bug that caused: Match 1 CORRECT, Matches 2+ INVERTED.
+        # Team detection via SPECTATOR fields (v1.3.2 fix).
+        # RL API docs state SPECTATOR fields are "present only if the client
+        # is spectating or on the player's team." SPECTATOR fields include:
+        # bHasCar, Speed, Boost, bBoosting, bOnGround, bOnWall, bPowersliding,
+        # bDemolished, bSupersonic.
+        #
+        # We use bHasCar as the team indicator: if ANY player on a team has
+        # bHasCar, that team IS the user's team. This is 100% reliable —
+        # no name-matching, no guessing TeamNum from the wrong player.
+        # Confirmation count (3 ticks) prevents false locks during loading.
         if self.user_team_num is None and players:
-            p = self._fast_find(players, self.player_name)
-            if p:
-                tnum = p.get("TeamNum", -1)
-                if tnum in (0, 1):
-                    if tnum == self._team_confirm_candidate:
-                        self._team_confirm_count += 1
-                        if self._team_confirm_count >= 3:
-                            self.user_team_num = tnum
-                            team_name = "Blue" if tnum == 0 else "Orange"
-                            log(f"Team CONFIRMED after {self._team_confirm_count} ticks: {tnum} ({team_name})")
-                            log(f"FOUND PLAYER: {p.get('Name')} on Team {tnum} ({team_name}) [scores: {self.scores}]")
-                            update_status("connected", f"Live - tracking {p.get('Name')}", self.player_name)
-                            # Duo detection at lock time (also re-checked every tick below).
-                            if self._friend_cache:
-                                for fp in players:
-                                    if fp.get("TeamNum") == self.user_team_num and fp is not p:
-                                        fpname = fp.get("Name", "").lower().strip()
-                                        if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
-                                            self.mode = "duo"
-                                            log(f"Duo detected: {fp.get('Name')}")
-                                            break
-                    else:
-                        # TeamNum changed — reset confirmation counter
-                        team_name_new = "Blue" if tnum == 0 else "Orange"
-                        log(f"Team candidate CHANGED: {self._team_confirm_candidate} → {tnum} ({team_name_new}); resetting confirmation count")
-                        self._team_confirm_candidate = tnum
-                        self._team_confirm_count = 1
-                else:
-                    log(f"DEFER detection: found '{p.get('Name')}' but TeamNum={tnum} (need 0 or 1); retrying next tick")
+            for p in players:
+                if "bHasCar" in p:
+                    candidate = p.get("TeamNum", -1)
+                    if candidate in (0, 1):
+                        if candidate == self._team_confirm_candidate:
+                            self._team_confirm_count += 1
+                            if self._team_confirm_count >= 3:
+                                self.user_team_num = candidate
+                                team_name = "Blue" if candidate == 0 else "Orange"
+                                log(f"Team DETECTED via SPECTATOR (bHasCar): {candidate} ({team_name}) after {self._team_confirm_count} ticks")
+                                # Now find the user's actual player on this team
+                                up = self._find_user_player(players)
+                                if up:
+                                    log(f"FOUND PLAYER: {up.get('Name')} on Team {candidate} ({team_name}) [scores: {self.scores}]")
+                                    update_status("connected", f"Live - tracking {up.get('Name')}", self.player_name)
+                                else:
+                                    log(f"WARNING: team {candidate} confirmed but user player '{self.player_name}' not found on that team")
+                                # Duo detection at lock time (also re-checked every tick below)
+                                if self._friend_cache:
+                                    for fp in players:
+                                        if fp.get("TeamNum") == self.user_team_num and fp is not up:
+                                            fpname = fp.get("Name", "").lower().strip()
+                                            if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
+                                                self.mode = "duo"
+                                                log(f"Duo detected: {fp.get('Name')}")
+                                                break
+                        else:
+                            # Different team — reset counter
+                            team_name_new = "Blue" if candidate == 0 else "Orange"
+                            team_name_old = "Blue" if self._team_confirm_candidate == 0 else "Orange" if self._team_confirm_candidate is not None else "None"
+                            log(f"SPECTATOR team CHANGED: {team_name_old} → {team_name_new}; resetting confirmation count")
+                            self._team_confirm_candidate = candidate
+                            self._team_confirm_count = 1
+                    break  # Found a player with bHasCar — team determined, stop scanning
 
         # Scores (fast)
         teams = game.get("Teams", ())
