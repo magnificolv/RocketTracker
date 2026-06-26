@@ -52,6 +52,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS match_details(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER UNIQUE NOT NULL, arena TEXT, overtime INTEGER DEFAULT 0, touches INTEGER DEFAULT 0, car_touches INTEGER DEFAULT 0, shots INTEGER DEFAULT 0, saves INTEGER DEFAULT 0, assists INTEGER DEFAULT 0, demos_given INTEGER DEFAULT 0, demos_taken INTEGER DEFAULT 0, boost_avg REAL DEFAULT 0, boost_time_pct REAL DEFAULT 0, supersonic_time_pct REAL DEFAULT 0, ground_time_pct REAL DEFAULT 0, air_time_pct REAL DEFAULT 0, wall_time_pct REAL DEFAULT 0, fastest_goal_kph REAL DEFAULT 0, avg_shot_power REAL DEFAULT 0, time_remaining_sec INTEGER, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
         CREATE TABLE IF NOT EXISTS goals(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER NOT NULL, scored_at TEXT NOT NULL, scorer TEXT NOT NULL, assister TEXT, team_num INTEGER NOT NULL, speed_kph REAL, time_remaining_sec INTEGER, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
         CREATE TABLE IF NOT EXISTS ball_hits(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER NOT NULL, hit_at TEXT NOT NULL, player TEXT NOT NULL, player_team INTEGER NOT NULL, pre_hit_speed REAL, post_hit_speed REAL, post_hit_kph REAL, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS matches_summary(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER UNIQUE, session_id INTEGER, played_at TEXT, user_score INTEGER, opponent_score INTEGER, result TEXT, mode TEXT, arena TEXT, highlight_icon TEXT, highlight_text TEXT, highlight_value REAL, goals INTEGER, shots INTEGER, saves INTEGER, demos_given INTEGER, demos_taken INTEGER, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
+        CREATE INDEX IF NOT EXISTS idx_summary_played ON matches_summary(played_at DESC);
     """)
     conn.commit(); conn.close()
 
@@ -120,6 +122,32 @@ def match_detail(mid):
         "details": dict(d) if d else {},
         "goals": [dict(g) for g in goals]
     })
+
+@app.route("/api/matches/summaries")
+def match_summaries():
+    """Warm-storage endpoint: paginated match summaries for History tab.
+    Hot layer (0-50): existing full-match queries.
+    Warm layer (51-200): this endpoint, ~50ms.
+    Cold layer (201+): indexed SQLite, lazy-loaded by offset.
+    """
+    offset = request.args.get("offset", 0, type=int)
+    limit = request.args.get("limit", 50, type=int)
+    limit = min(limit, 100)  # hard cap
+
+    conn = get_db()
+    total = conn.execute("SELECT COUNT(*) FROM matches_summary").fetchone()[0]
+    rows = conn.execute(
+        "SELECT * FROM matches_summary ORDER BY played_at DESC LIMIT ? OFFSET ?",
+        (limit, offset)
+    ).fetchall()
+    conn.close()
+
+    return jsonify({
+        "summaries": [dict(r) for r in rows],
+        "total": total,
+        "offset": offset,
+    })
+
 
 @app.route("/api/stats")
 def stats():
@@ -214,6 +242,10 @@ def quit_tracker():
 @app.route("/api/coach/match/<int:match_id>")
 def coach_match(match_id):
     return jsonify(coach.analyze_match(match_id))
+
+@app.route("/api/coach/session/<int:session_id>")
+def coach_session(session_id):
+    return jsonify(coach.get_session_anomalies(session_id))
 
 @app.route("/api/coach/records")
 def coach_records():

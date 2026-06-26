@@ -13,6 +13,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Active Coach (TRIZ #25): analyse each match right after recording it.
+# Instance is created after DB_PATH is defined (see below).
+from coach import CoachEngine
+
+from field_resolver import FieldResolver
+
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -24,6 +30,9 @@ DB_PATH = BASE_DIR / "data-v2.db"
 CONFIG_PATH = BASE_DIR / "config.yaml"
 LOG_PATH = BASE_DIR / "listener.log"
 STATUS_PATH = BASE_DIR / "listener_status.json"
+
+# CoachEngine needs DB_PATH - instantiate it now that the path is known.
+_coach = CoachEngine(str(DB_PATH))
 
 UU_TO_KPH = 0.036
 
@@ -93,12 +102,90 @@ def get_db():
     return conn
 
 
-def update_status(state: str, msg: str = "", player="", friends=None):
+def init_db():
+    """Create tables if they don't exist — called once at startup."""
+    conn = get_db()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS matches_summary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            match_id INTEGER UNIQUE,
+            session_id INTEGER,
+            played_at TEXT,
+            user_score INTEGER,
+            opponent_score INTEGER,
+            result TEXT,
+            mode TEXT,
+            arena TEXT,
+            highlight_icon TEXT,
+            highlight_text TEXT,
+            highlight_value REAL,
+            goals INTEGER,
+            shots INTEGER,
+            saves INTEGER,
+            demos_given INTEGER,
+            demos_taken INTEGER,
+            FOREIGN KEY (match_id) REFERENCES matches(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_summary_played ON matches_summary(played_at DESC);
+    """)
+    conn.commit()
+    conn.close()
+    log("DB initialized: matches_summary table ready")
+
+
+def _write_summary(match_id: int):
+    """Write a pre-computed summary row for fast warm-storage queries.
+    Picks the best metric (goals/demos/shots/saves) as the highlight.
+    """
+    db = get_db()
+    match = db.execute(
+        "SELECT m.*, md.arena, md.shots, md.saves, md.demos_given, md.demos_taken "
+        "FROM matches m LEFT JOIN match_details md ON m.id = md.match_id "
+        "WHERE m.id = ?", (match_id,)
+    ).fetchone()
+    if not match:
+        db.close()
+        return
+
+    goals = match["user_score"] or 0
+    demos = match["demos_given"] or 0
+    shots = match["shots"] or 0
+    saves = match["saves"] or 0
+
+    # Pick the best metric as the highlight
+    metrics = [
+        ("⚽", "Goals", goals),
+        ("💥", "Demos", demos),
+        ("🎯", "Shots", shots),
+        ("🛡️", "Saves", saves),
+    ]
+    metrics.sort(key=lambda x: x[2], reverse=True)
+    hi_icon, hi_text, hi_value = metrics[0]
+
+    db.execute(
+        """INSERT OR REPLACE INTO matches_summary
+           (match_id, session_id, played_at, user_score, opponent_score,
+            result, mode, arena, highlight_icon, highlight_text, highlight_value,
+            goals, shots, saves, demos_given, demos_taken)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (match_id, match["session_id"], match["played_at"],
+         goals, match["opponent_score"],
+         match["result"], match["mode"], match["arena"],
+         hi_icon, hi_text, hi_value,
+         goals, shots, saves, demos, match["demos_taken"] or 0)
+    )
+    db.commit()
+    db.close()
+
+
+def update_status(state: str, msg: str = "", player="", friends=None, poll_interval=None, poll_mode=None):
     try:
         with open(STATUS_PATH, "w") as f:
             json.dump({
                 "state": state, "message": msg, "player": player,
                 "friends": friends or [],
+                "poll_interval": poll_interval,
+                "poll_mode": poll_mode,
                 "updated": datetime.now(timezone.utc).isoformat()
             }, f)
     except Exception:
@@ -118,7 +205,8 @@ class MatchState:
                  'boosting_ticks', 'supersonic_ticks',
                  'on_ground_ticks', 'in_air_ticks', 'on_wall_ticks',
                  '_match_recorded', '_player_cache', '_friend_cache',
-                 '_prev_demos', '_was_demolished')
+                 '_prev_demos', '_was_demolished',
+                 '_last_update_time', '_poll_interval', '_connected')
 
     def __init__(self, player_name, friend_names):
         self.player_name = player_name.lower().strip()
@@ -126,6 +214,9 @@ class MatchState:
         self._player_cache = {}  # {name_hash: result} for fast lookups
         self._friend_cache = set(f.lower().strip() for f in friend_names if f.strip())
         self._match_recorded = False
+        self._last_update_time = 0.0
+        self._poll_interval = 60
+        self._connected = False
         self.reset()
 
     def reset(self):
@@ -167,6 +258,7 @@ class MatchState:
         players = data.get("Players", [])
         game = data.get("Game", {})
         self.tick_count += 1
+        self._last_update_time = time.time()
 
         # Player detection (only run until found)
         if self.user_team_num is None and players:
@@ -289,6 +381,9 @@ class MatchState:
             "INSERT INTO matches (session_id, played_at, user_score, opponent_score, result, mode) VALUES (?,?,?,?,?,?)",
             (session_id, now, self.user_score, self.opponent_score, result, self.mode))
         match_id = cur.lastrowid
+        if not match_id:
+            db.close()
+            return
 
         ticks = max(self.active_tick_count, 1)  # Use active ticks only (after player found)
 
@@ -323,8 +418,19 @@ class MatchState:
                         bh.get("pre_hit"), bh.get("post_hit"), bh.get("post_hit_kph")))
         db.commit()
         db.close()
+        _write_summary(match_id)
         flush_log()
         log(f"RECORDED: {'WIN' if result == 'win' else 'LOSS'}! {self.user_score}-{self.opponent_score} [{self.mode}]")
+        # Active Coach (TRIZ #25): self-analyse immediately after recording.
+        # Runs after DB close so a coach error can never corrupt the match row.
+        # Insights are informational only - failures are logged and swallowed.
+        try:
+            res = _coach.analyze_match(match_id)
+            n = len(res.get("insights", []))
+            if n:
+                log(f"COACH: {n} insights for match {match_id}")
+        except Exception as e:
+            log(f"COACH WARN: analyze_match failed for {match_id}: {e}")
 
     @property
     def user_score(self): return self.scores[self.user_team_num] if self.user_team_num is not None else 0
@@ -365,6 +471,7 @@ def run_listener(player: str, friends: list, stop_event):
             return
 
     state = MatchState(player, friends)
+    init_db()
     update_status("connecting", "Connecting to Rocket League...", player, friends)
 
     reconnect_delay = 3
@@ -384,6 +491,7 @@ def run_listener(player: str, friends: list, stop_event):
             log("Connected to Rocket League Stats API!")
             update_status("connected", "Live - tracking matches", player, friends)
             reconnect_delay = 3
+            state._connected = True
 
             buffer = ""
             pos = 0
@@ -428,7 +536,7 @@ def run_listener(player: str, friends: list, stop_event):
 
                         try:
                             obj, end = decoder.raw_decode(buffer[pos:])
-                        except json_module.JSONDecodeError:
+                        except json.JSONDecodeError:
                             break  # Incomplete object, wait for more data
 
                         event = obj.get("Event", "")
@@ -438,7 +546,7 @@ def run_listener(player: str, friends: list, stop_event):
                         # Fast event dispatch - skip data we don't need
                         if event == "UpdateState":
                             if isinstance(raw_data, str):
-                                data = json_module.loads(raw_data)
+                                data = json.loads(raw_data)
                             else:
                                 data = raw_data or {}
                             state.handle_update_state(data)
@@ -456,8 +564,8 @@ def run_listener(player: str, friends: list, stop_event):
                         elif event in ("MatchEnded", "MatchDestroyed"):
                             if state.user_team_num is not None and not state._match_recorded:
                                 state._match_recorded = True
-                                d = raw_data if isinstance(raw_data, dict) else (json_module.loads(raw_data) if isinstance(raw_data, str) else {})
-                                winner = d.get("WinnerTeamNum", d.get("Winner"))
+                                d = raw_data if isinstance(raw_data, dict) else (json.loads(raw_data) if isinstance(raw_data, str) else {})
+                                winner = FieldResolver.resolve(d, "winner")
                                 if winner is not None:
                                     if isinstance(winner, str):
                                         wn = 0 if winner.lower() == "blue" else 1
@@ -477,23 +585,35 @@ def run_listener(player: str, friends: list, stop_event):
                                 state.reset()
 
                         elif event == "GoalScored":
-                            d = raw_data if isinstance(raw_data, dict) else (json_module.loads(raw_data) if isinstance(raw_data, str) else {})
-                            scorer = d.get("Scorer", {})
-                            sname = scorer.get("Name", "")
+                            d = raw_data if isinstance(raw_data, dict) else (json.loads(raw_data) if isinstance(raw_data, str) else {})
+                            scorer = FieldResolver.resolve_raw(d, "scorer") or {}
+                            # Scorer var būt dict (ar Name/TeamNum) vai vienkārši string
+                            if isinstance(scorer, dict):
+                                sname = scorer.get("Name") or scorer.get("name") or ""
+                                steam = scorer.get("TeamNum", -1)
+                            else:
+                                sname = str(scorer or "")
+                                steam = -1
+                                # Mēģinām uzminēt komandu no top-level
+                                steam = FieldResolver.resolve(d, "team_num")
+                                if steam is None:
+                                    steam = -1
                             if not sname:
                                 pos += end; continue
-                            steam = scorer.get("TeamNum", -1)
-                            state.scores[steam] = state.scores[steam] + 1 if steam in (0, 1) else state.scores[steam]
-                            gs = d.get("GoalSpeed")
+                            if steam in (0, 1):
+                                state.scores[steam] = state.scores[steam] + 1
+                            gs = FieldResolver.resolve(d, "goal_speed")
                             speed_kph = round(gs, 1) if gs else None  # GoalSpeed already in km/h
+                            assister = FieldResolver.resolve_raw(d, "assister")
+                            aname = (assister.get("Name") or assister.get("name")) if isinstance(assister, dict) else (assister or None)
                             state.goals.append({
                                 "scored_at": datetime.now(timezone.utc).isoformat(),
-                                "scorer": sname, "assister": d.get("Assister", {}).get("Name") or None,
+                                "scorer": sname, "assister": aname,
                                 "team_num": steam, "speed_kph": speed_kph,
                                 "time_remaining": state.time_remaining})
 
                         elif event == "BallHit":
-                            d = raw_data if isinstance(raw_data, dict) else (json_module.loads(raw_data) if isinstance(raw_data, str) else {})
+                            d = raw_data if isinstance(raw_data, dict) else (json.loads(raw_data) if isinstance(raw_data, str) else {})
                             players = d.get("Players", [])
                             if players:
                                 ph = players[0]  # Only first player is the hitter
@@ -507,13 +627,31 @@ def run_listener(player: str, friends: list, stop_event):
 
                         elif event == "Demolish":
                             d = raw_data if isinstance(raw_data, dict) else {}
-                            # RL may send different field names — try them all
-                            att = d.get("Attacker") or d.get("attacker") or d.get("AttackerName") or d.get("attacker_name") or ""
-                            vic = d.get("Victim") or d.get("victim") or d.get("VictimName") or d.get("victim_name") or ""
-                            # If these are dicts, extract Name
-                            an = att.get("Name", "") if isinstance(att, dict) else str(att or "")
-                            vn = vic.get("Name", "") if isinstance(vic, dict) else str(vic or "")
-                            an_l = an.lower(); vn_l = vn.lower()
+                            # Semantiskais field resolver — atrast attacker/victim pēc jebkura zināma nosaukuma
+                            an = FieldResolver.resolve(d, "attacker")
+                            vn = FieldResolver.resolve(d, "victim")
+                            # Ja netika atrasts, mēģinām uzminēt pēc tipa (pirmā divi str lauki)
+                            if not an:
+                                key, val = FieldResolver.guess_by_type(d, str)
+                                if key and val:
+                                    an = val
+                                    log(FieldResolver.raw_dump(d, "DEMO attacker guessed"))
+                            if not vn:
+                                keys_to_skip = {"Event"}
+                                if an:
+                                    keys_to_skip.add(str(an))
+                                # Otrais str lauks, izlaižot jau atrasto attacker
+                                for k, v in d.items():
+                                    if k in keys_to_skip or k.startswith("_") or k.startswith("MatchGuid"):
+                                        continue
+                                    if isinstance(v, str) and v:
+                                        vn = v
+                                        break
+                                    if isinstance(v, dict) and (v.get("Name") or v.get("name")):
+                                        vn = v.get("Name") or v.get("name")
+                                        break
+                            an_l = (an or "").lower()
+                            vn_l = (vn or "").lower()
                             if an_l and (state.player_name in an_l or an_l in state.player_name):
                                 state.demos_given += 1
                                 log(f"DEMO GIVEN: {an}")
@@ -521,8 +659,8 @@ def run_listener(player: str, friends: list, stop_event):
                                 state.demos_taken += 1
                                 log(f"DEMO TAKEN: {vn}")
                             else:
-                                # RAW dump for debugging unknown format
-                                log(f"DEMO RAW: attacker={att}, victim={vic}, d={d}")
+                                # RAW dump kad nekas nestrādā
+                                log(FieldResolver.raw_dump(d, "DEMO UNKNOWN FORMAT"))
 
                         elif event == "OverTimeBegin":
                             state.is_overtime = True
@@ -565,6 +703,8 @@ def run_listener(player: str, friends: list, stop_event):
                     last_flush = now
 
             # Connection ended
+            state._connected = False
+            state._poll_interval = 60
             sock.close()
             if state.user_team_num is not None and state.tick_count > 0:
                 res = "win" if state.user_score > state.opponent_score else "loss"
@@ -582,8 +722,19 @@ def run_listener(player: str, friends: list, stop_event):
         except Exception: pass
         if stop_event.is_set(): break
 
-        time.sleep(reconnect_delay)
-        reconnect_delay = min(reconnect_delay * 1.5, max_delay)
+        # Elpojošs polling — adaptīvs intervāls atkarībā no datu plūsmas
+        now = time.time()
+        if state._connected and state._last_update_time > 0:
+            gap = now - state._last_update_time
+            state._poll_interval = 2 if gap < 5 else 15 if gap < 30 else 60
+        else:
+            state._poll_interval = 60
+        poll_mode = "hot" if state._poll_interval == 2 else "warm" if state._poll_interval == 15 else "cold"
+        update_status("disconnected" if not state._connected else "connected",
+                      "Reconnecting..." if not state._connected else f"Polling ({poll_mode})",
+                      player, friends,
+                      poll_interval=state._poll_interval, poll_mode=poll_mode)
+        time.sleep(min(state._poll_interval, 2))
 
     flush_log()
     log("Listener stopped")
