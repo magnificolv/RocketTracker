@@ -7,6 +7,17 @@ Starts FAST TCP listener (thread) + Flask web server.
 import os, sys, threading, webbrowser, time
 from pathlib import Path
 
+# Waitress: production-grade pure-Python WSGI server. Replaces Flask's dev
+# server (which prints "Do not use in a production environment" and freezes
+# the dashboard during slow /api/rl-diagnostics calls). Waitress is
+# PyInstaller-friendly and has no native deps.
+try:
+    from waitress import serve as _wsgi_serve
+    _HAS_WAITRESS = True
+except ImportError:
+    _wsgi_serve = None
+    _HAS_WAITRESS = False
+
 if sys.platform == "win32":
     try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     except Exception: pass
@@ -51,17 +62,22 @@ def main():
     app.config["listener_thread"] = listener_thread
     app.config["listener_stop_event"] = stop_event
 
-    def open_browser():
-        time.sleep(1.5)
-        webbrowser.open(f"http://localhost:{config.get('app', {}).get('port', 3010)}")
-
-    threading.Thread(target=open_browser, daemon=True).start()
+    if "--no-browser" not in sys.argv[1:]:
+        def open_browser():
+            time.sleep(1.5)
+            webbrowser.open(f"http://localhost:{config.get('app', {}).get('port', 3010)}")
+        threading.Thread(target=open_browser, daemon=True).start()
 
     port = config.get("app", {}).get("port", 3010)
     print(f"  🌐 Dashboard -> http://localhost:{port}")
     print("=" * 50)
     print("  Press Ctrl+C to exit (or use ⏻ button in dashboard)")
-    app.run(host="127.0.0.1", port=port, debug=False)
+    if _wsgi_serve is not None:
+        print("  🟢 Waitress WSGI server (4 threads)")
+        _wsgi_serve(app, host="127.0.0.1", port=port, threads=4)
+    else:
+        print("  ⚠️  Waitress not installed — falling back to Flask dev server")
+        app.run(host="127.0.0.1", port=port, debug=False)
     stop_event.set()
     print("👋 Shutting down...")
 
