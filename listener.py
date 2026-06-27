@@ -206,7 +206,8 @@ class MatchState:
                  'on_ground_ticks', 'in_air_ticks', 'on_wall_ticks',
                  '_match_recorded', '_player_cache', '_friend_cache',
                  '_prev_demos', '_was_demolished',
-                 '_last_update_time', '_poll_interval', '_connected')
+                 '_last_update_time', '_poll_interval', '_connected',
+                 '_team_confirm_count', '_team_confirm_candidate')
 
     def __init__(self, player_name, friend_names):
         self.player_name = player_name.lower().strip()
@@ -217,6 +218,8 @@ class MatchState:
         self._last_update_time = 0.0
         self._poll_interval = 60
         self._connected = False
+        self._team_confirm_count = 0
+        self._team_confirm_candidate = None
         self.reset()
 
     def reset(self):
@@ -238,20 +241,61 @@ class MatchState:
         self._player_cache.clear()
         self._prev_demos = 0
         self._was_demolished = False
+        self._team_confirm_count = 0
+        self._team_confirm_candidate = None
 
     def _fast_find(self, players, target):
-        """Ultra-fast player lookup - no string slicing."""
+        """Two-pass player lookup. Pass 1: exact (case-insensitive) match
+        across the WHOLE Players list — wins regardless of iteration order.
+        Pass 2: partial-match fallback ONLY if no exact match exists.
+
+        FIX (v1.0.8 team-swap bug): the old single-pass version tried exact
+        then partial per-iteration, so a partial-match candidate earlier in
+        the array (e.g. target 'mag' vs name 'ImageMag') shadowed an exact
+        match later in the array (name 'Mag'), locking user_team_num to the
+        WRONG team for the entire match and inverting every score/result.
+        """
+        # Pass 1: exact match (case-insensitive)
+        for p in players:
+            pname = p.get("Name", "")
+            if pname and pname.lower() == target:
+                return p
+        # Pass 2: partial match fallback (only if NO exact match exists)
         for p in players:
             pname = p.get("Name", "")
             if not pname:
                 continue
-            # Exact match first (most common case)
-            if pname.lower() == target:
-                return p
-            # Partial match fallback
             pname_l = pname.lower()
             if target in pname_l or pname_l in target:
                 return p
+        return None
+
+    def _find_user_player(self, players):
+        """Team-locked user lookup for stats capture. Only ever returns a
+        player on user_team_num, so partial matching can NEVER pick a
+        player from the opposing team and cause team_num/stats to disagree.
+
+        Used AFTER detection has locked user_team_num. Detection itself
+        still uses _fast_find (both teams) because the team is unknown yet.
+        Two-pass: exact name first, partial fallback — both filtered to
+        user_team_num.
+        """
+        if self.user_team_num is None:
+            return None
+        # Pass 1: exact name, team-locked
+        for p in players:
+            pname = p.get("Name", "")
+            if (pname and pname.lower() == self.player_name
+                    and p.get("TeamNum") == self.user_team_num):
+                return p
+        # Pass 2: partial name, team-locked
+        for p in players:
+            pname = p.get("Name", "").lower()
+            if not pname:
+                continue
+            if p.get("TeamNum") == self.user_team_num:
+                if self.player_name in pname or pname in self.player_name:
+                    return p
         return None
 
     def handle_update_state(self, data):
@@ -260,22 +304,51 @@ class MatchState:
         self.tick_count += 1
         self._last_update_time = time.time()
 
-        # Player detection (only run until found)
+        # Team detection via SPECTATOR fields (v1.3.2 fix).
+        # RL API docs state SPECTATOR fields are "present only if the client
+        # is spectating or on the player's team." SPECTATOR fields include:
+        # bHasCar, Speed, Boost, bBoosting, bOnGround, bOnWall, bPowersliding,
+        # bDemolished, bSupersonic.
+        #
+        # We use bHasCar as the team indicator: if ANY player on a team has
+        # bHasCar, that team IS the user's team. This is 100% reliable —
+        # no name-matching, no guessing TeamNum from the wrong player.
+        # Confirmation count (3 ticks) prevents false locks during loading.
         if self.user_team_num is None and players:
-            p = self._fast_find(players, self.player_name)
-            if p:
-                self.user_team_num = p.get("TeamNum", -1)
-                log(f"FOUND PLAYER: {p.get('Name')} on Team {self.user_team_num} ({'Blue' if self.user_team_num == 0 else 'Orange'}) [scores: {self.scores}]")
-                update_status("connected", f"Live - tracking {p.get('Name')}", self.player_name)
-                # Fast duo detection
-                if self._friend_cache:
-                    for fp in players:
-                        if fp.get("TeamNum") == self.user_team_num:
-                            fpname = fp.get("Name", "").lower().strip()
-                            if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
-                                self.mode = "duo"
-                                log(f"Duo detected: {fp.get('Name')}")
-                                break
+            for p in players:
+                if "bHasCar" in p:
+                    candidate = p.get("TeamNum", -1)
+                    if candidate in (0, 1):
+                        if candidate == self._team_confirm_candidate:
+                            self._team_confirm_count += 1
+                            if self._team_confirm_count >= 3:
+                                self.user_team_num = candidate
+                                team_name = "Blue" if candidate == 0 else "Orange"
+                                log(f"Team DETECTED via SPECTATOR (bHasCar): {candidate} ({team_name}) after {self._team_confirm_count} ticks")
+                                # Now find the user's actual player on this team
+                                up = self._find_user_player(players)
+                                if up:
+                                    log(f"FOUND PLAYER: {up.get('Name')} on Team {candidate} ({team_name}) [scores: {self.scores}]")
+                                    update_status("connected", f"Live - tracking {up.get('Name')}", self.player_name)
+                                else:
+                                    log(f"WARNING: team {candidate} confirmed but user player '{self.player_name}' not found on that team")
+                                # Duo detection at lock time (also re-checked every tick below)
+                                if self._friend_cache:
+                                    for fp in players:
+                                        if fp.get("TeamNum") == self.user_team_num and fp is not up:
+                                            fpname = fp.get("Name", "").lower().strip()
+                                            if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
+                                                self.mode = "duo"
+                                                log(f"Duo detected: {fp.get('Name')}")
+                                                break
+                        else:
+                            # Different team — reset counter
+                            team_name_new = "Blue" if candidate == 0 else "Orange"
+                            team_name_old = "Blue" if self._team_confirm_candidate == 0 else "Orange" if self._team_confirm_candidate is not None else "None"
+                            log(f"SPECTATOR team CHANGED: {team_name_old} → {team_name_new}; resetting confirmation count")
+                            self._team_confirm_candidate = candidate
+                            self._team_confirm_count = 1
+                    break  # Found a player with bHasCar — team determined, stop scanning
 
         # Scores (fast)
         teams = game.get("Teams", ())
@@ -293,9 +366,12 @@ class MatchState:
         if "TimeSeconds" in game:
             self.time_remaining = game["TimeSeconds"]
 
-        # Player stats (fast path if user_team_num is set)
+        # Player stats — team-locked lookup.
+        # FIX (v1.0.8): _find_user_player only ever returns a player ON
+        # user_team_num, so partial matching can NEVER pick a player from
+        # the opposing team and cause stats/team_num disagreement.
         if self.user_team_num is not None and players:
-            p = self._fast_find(players, self.player_name)
+            p = self._find_user_player(players)
             if p:
                 self.active_tick_count += 1
                 self.touches = p.get("Touches", 0) or 0
