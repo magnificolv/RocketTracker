@@ -378,7 +378,7 @@ def deep_stats():
             ROUND(AVG(supersonic_time_pct), 1) as avg_supersonic_time,
             ROUND(AVG(air_time_pct), 1) as avg_air_time,
             MAX(fastest_goal_kph) as all_time_fastest_goal,
-            AVG(avg_shot_power) as overall_avg_shot_power
+            ROUND(AVG(avg_shot_power), 1) as overall_avg_shot_power
         FROM match_details
     """).fetchone()
     total_goals = conn.execute("SELECT COUNT(*) as cnt FROM goals").fetchone()["cnt"]

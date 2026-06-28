@@ -377,7 +377,8 @@ class MatchState:
                             log(f"SPECTATOR team CHANGED: {team_name_old} → {team_name_new}; resetting confirmation count")
                             self._team_confirm_candidate = candidate
                             self._team_confirm_count = 1
-                    break  # Found a player with bHasCar — team determined, stop scanning
+                        break  # Found valid team — stop scanning
+                    # else: TeamNum invalid (-1/None) — skip this player, check next one
 
         # Scores (fast)
         teams = game.get("Teams", ())
