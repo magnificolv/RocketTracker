@@ -1,9 +1,4 @@
-<div align="center">
-  <img src="icon.png" width="128" alt="RocketTracker logo"><br>
-  <h1>🚀 RocketTracker</h1>
-  <p><strong>Auto-track every Rocket League match — portable, no install required.</strong></p>
-  <p>Double-click the .exe and play. Stats appear automatically.</p>
-</div>
+# 🚀 Rocket League Match Tracker v2.0.0
 
 <p align="center">
   <a href="https://github.com/magnificolv/RocketTracker/releases/latest"><img src="https://img.shields.io/github/v/release/magnificolv/RocketTracker?style=flat-square&label=version&color=blue" alt="Version"></a>
@@ -54,14 +49,22 @@
 
 ## ✨ What It Tracks
 
-| Category | Stats |
-|:--------:|-------|
-| 🎯 **Shot Power** | Fastest goal (km/h), avg shot power, shot accuracy %, total shots |
-| ⛽ **Movement** | Avg boost %, time boosting %, supersonic %, air/ground/wall time % |
-| 💥 **Combat** | Demos given, demos taken, saves, overtime matches |
-| 🎮 **Ball Control** | Total touches, car touches, assists, your goals |
-| 👥 **Duo Mode** | Auto-detects when your friend is on your team |
-| 📋 **Sessions** | Auto-creates sessions, keeps full history |
+### 1. Download
+Get the latest `RL-Tracker-v2.0.0` from [Releases](https://github.com/magnificolv/RocketTracker/releases).
+
+### 2. Run
+Double-click `RL-Tracker-v2.0.0`. A console window opens — **keep it running**.
+
+### 3. Open Dashboard
+Your browser opens automatically at `http://localhost:3010`.
+
+### 4. Set Your Player Name
+Click ⚙️ **Settings** → enter your Rocket League display name → **Save**.
+
+### 5. Launch Rocket League
+The tracker auto-connects. Status dot turns 🟢 green when tracking is live. Play a match — stats appear automatically!
+
+> **⚠️ First time?** After entering your name, restart Rocket League so the Stats API activates.
 
 ---
 
@@ -91,25 +94,33 @@ False positive — the file is unsigned. Click `Keep anyway` in your browser, or
 
 ## 🔄 Auto-Update
 
-The tracker checks GitHub for new versions. When an update is available, you'll see it in Settings — one click downloads and installs the new version, preserving your stats.
+| Problem | Fix |
+|---------|-----|
+| Status stays ⚫ grey | Make sure Rocket League is running AND you're in a match (not main menu) |
+| No stats appear | Check your player name matches exactly in Settings |
+| Port 3010 already in use | Close other instances of the tracker first |
+| .exe crashes immediately | Try running as Administrator (RL config folder may need permissions) |
+
+---
+
+## 🛠️ For Friends
+
+1. Download `RL-Tracker-v2.0.0`
+2. Double-click to run
+3. Enter YOUR Rocket League display name in Settings
+4. Play!
+
+Each player needs their own `config.yaml` with their name. The tracker auto-creates the Stats API config in your RL folder.
 
 ---
 
 ## 📝 Version History
 
 | Version | Date | Changes |
-|:-------:|:----:|---------|
-| **v1.3.2** | Jun 26 | **SPECTATOR-field team detection** — uses RL API's `bHasCar` SPECTATOR field to determine user's team. 100% reliable, no name-matching. Fixes team-swap bug where match 2+ results were inverted. |
-| **v1.3.1** | Jun 26 | Team detection confirmation fix — waits for 3 consistent ticks before locking team. |
-| **v1.3.0** | Jun 21 | Auto-Create now fixes **both** INI files (including install-dir DefaultStatsAPI.ini that RL reverts to PacketSendRate=0). Copy All diagnostics button. |
-| **v1.2.0** | Jun 21 | New icon, seamless one-click auto-update |
-| **v1.1.0** | Jun 21 | Auto-update check from GitHub |
-| **v1.0.9** | Jun 21 | Waitress WSGI server, Ground/Wall Time UI fix |
-| **v1.0.8** | Jun 21 | Team swap bug fix — scores no longer flip mid-session |
-| **v1.0.7** | Jun 21 | WSL2 port-forwarding detection in diagnostics |
-| **v1.0.5** | Jun 21 | Self-serve diagnostics (🔍 Diagnose button) |
-| **v1.0.4** | Jun 20 | GLM 5.2 code review — 17 fixes |
-| **v1.0.0** | Jun 17 | First public release |
+|---------|------|---------|
+| **v2.0.0** | Jun 27, 2026 | Coach engine, Matryoshka UI, SPECTATOR team detection, Waitress server |
+| v9g | Jun 16, 2026 | Custom icon, all features stable |
+| v1-v8 | Jun 10-15, 2026 | Internal development (dedup, demolish tracking, deep stats, PyInstaller builds) |
 
 ---
 

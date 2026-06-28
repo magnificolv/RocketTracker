@@ -35,7 +35,7 @@ from listener import run_listener, ensure_tastatsapi_ini
 
 def main():
     print("=" * 50)
-    print("  🚀 Rocket League Tracker v1.3.2")
+    print("  🚀 Rocket League Tracker v2.0.0")
     print(f"  📁 {BASE_DIR}")
     print("=" * 50)
 
@@ -73,11 +73,15 @@ def main():
     print("=" * 50)
     print("  Press Ctrl+C to exit (or use ⏻ button in dashboard)")
     if _wsgi_serve is not None:
-        print(f"  🟢 Waitress WSGI server (4 threads)")
+        print("  🟢 Waitress WSGI server (4 threads)")
         _wsgi_serve(app, host="127.0.0.1", port=port, threads=4)
     else:
         print("  ⚠️  Waitress not installed — falling back to Flask dev server")
         app.run(host="127.0.0.1", port=port, debug=False)
+    # Belt-and-suspenders: if /api/quit set the flag, exit NOW
+    if app.config.get("_should_exit"):
+        print("👋 Shutting down via /api/quit...")
+        os._exit(0)
     stop_event.set()
     print("👋 Shutting down...")
 

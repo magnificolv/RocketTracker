@@ -10,8 +10,14 @@ import sqlite3
 import socket
 import sys
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
+
+# Active Coach (TRIZ #25): analyse each match right after recording it.
+# Instance is created after DB_PATH is defined (see below).
+from coach import CoachEngine
+
+from field_resolver import FieldResolver
 
 if sys.platform == "win32":
     try:
@@ -20,10 +26,13 @@ if sys.platform == "win32":
         pass
 
 BASE_DIR = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
-DB_PATH = BASE_DIR / "data.db"
+DB_PATH = BASE_DIR / "data-v2.db"
 CONFIG_PATH = BASE_DIR / "config.yaml"
 LOG_PATH = BASE_DIR / "listener.log"
 STATUS_PATH = BASE_DIR / "listener_status.json"
+
+# CoachEngine needs DB_PATH - instantiate it now that the path is known.
+_coach = CoachEngine(str(DB_PATH))
 
 UU_TO_KPH = 0.036
 
@@ -44,39 +53,12 @@ def flush_log():
             _log_queue.clear()
 
 
-def find_rl_config_candidates():
-    """Return ALL candidate RL config paths (existing or not) for diagnostics.
-
-    Order matters: the first existing path is what find_rl_config_dir() returns.
-    Includes OneDrive-redirected Documents, a common cause of "INI in wrong
-    location" for friends whose Documents folder is synced via OneDrive.
-    """
-    userprofile = Path(os.environ.get("USERPROFILE", "") or "")
-    home = Path.home()
-    # Relative tail common to every candidate
-    rel = Path("My Games") / "Rocket League" / "TAGame" / "Config"
-    raw = [
-        userprofile / "Documents" / rel,
-        home / "Documents" / rel,
-        # OneDrive redirected Documents (very common on Win11)
-        userprofile / "OneDrive" / "Documents" / rel,
-        userprofile / "OneDrive" / rel,
-        # Edge case: Documents explicitly under OneDrive root
-        home / "OneDrive" / "Documents" / rel,
-    ]
-    # Deduplicate while preserving order
-    seen = set()
-    out = []
-    for c in raw:
-        s = str(c)
-        if s and s not in seen:
-            seen.add(s)
-            out.append(c)
-    return out
-
-
 def find_rl_config_dir():
-    for c in find_rl_config_candidates():
+    candidates = [
+        Path(os.environ.get("USERPROFILE", "")) / "Documents" / "My Games" / "Rocket League" / "TAGame" / "Config",
+        Path.home() / "Documents" / "My Games" / "Rocket League" / "TAGame" / "Config",
+    ]
+    for c in candidates:
         if c.exists():
             return c
     return None
@@ -87,15 +69,10 @@ def ensure_tastatsapi_ini():
     if not config_dir:
         return False
     ini_path = config_dir / "TAStatsAPI.ini"
-    needed = "[TAGame.MatchStatsExporter_TA]\nPort=49123\nPacketSendRate=30\n"
-    if ini_path.exists():
-        try:
-            current = ini_path.read_text()
-        except Exception:
-            current = ""
-        if "TAGame.MatchStatsExporter_TA" in current and "PacketSendRate=30" in current:
-            log("OK: TAStatsAPI.ini already correct")
-            return True
+    needed = "[System]\nPacketSendRate=30\n"
+    if ini_path.exists() and "PacketSendRate=30" in ini_path.read_text():
+        log("OK: TAStatsAPI.ini already correct")
+        return True
     try:
         ini_path.write_text(needed)
         log("OK: TAStatsAPI.ini created/updated")
@@ -103,67 +80,6 @@ def ensure_tastatsapi_ini():
     except Exception as e:
         log(f"ERROR: Failed to write TAStatsAPI.ini: {e}")
         return False
-
-
-def ensure_default_statsapi_ini():
-    """Fix DefaultStatsAPI.ini in the RL install directory (Epic Games / Steam).
-
-    Rocket League reads DefaultStatsAPI.ini from the install dir on startup
-    AND actively rewrites it with PacketSendRate=0 on some Epic Games builds.
-    This fixes the file and makes it read-only so RL cannot revert it.
-    """
-    import stat
-    ini_content = "[TAGame.MatchStatsExporter_TA]\nPort=49123\nPacketSendRate=30\n"
-    # Find RL install dir — same logic as app.py:_find_rl_install_dir()
-    candidates = []
-    progfiles = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
-    # Steam
-    for base in [Path(progfiles) / "Steam" / "steamapps" / "common" / "rocketleague"]:
-        if (base / "TAGame" / "Config").is_dir():
-            candidates.append(base)
-    # Epic Games
-    for base in [Path(progfiles) / "Epic Games" / "rocketleague",
-                 Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Epic Games" / "rocketleague"]:
-        if (base / "TAGame" / "Config").is_dir():
-            candidates.append(base)
-    # Also check running process path
-    try:
-        import subprocess as _sp
-        out = _sp.run(["wmic", "process", "where", "name='RocketLeague.exe'", "get", "ExecutablePath", "/format:list"],
-                      capture_output=True, text=True, timeout=4)
-        for line in out.stdout.splitlines():
-            line = line.strip()
-            if line.lower().endswith("rocketleague.exe"):
-                p = Path(line)
-                if p.exists():
-                    candidates.insert(0, p.parent.parent)  # bin -> install root
-    except Exception:
-        pass
-    
-    for install_dir in candidates:
-        dsi = install_dir / "TAGame" / "Config" / "DefaultStatsAPI.ini"
-        if not dsi.exists():
-            continue
-        try:
-            current = dsi.read_text(encoding="utf-8", errors="replace")
-        except Exception:
-            continue
-        if "PacketSendRate=30" in current and "Port=49123" in current:
-            log(f"OK: DefaultStatsAPI.ini already correct at {dsi}")
-            # Ensure read-only
-            try:
-                dsi.chmod(stat.S_IREAD)
-            except Exception:
-                pass
-            return True
-        try:
-            dsi.write_text(ini_content, encoding="ascii")
-            dsi.chmod(stat.S_IREAD)  # read-only — RL cannot overwrite
-            log(f"OK: DefaultStatsAPI.ini fixed + locked at {dsi}")
-            return True
-        except Exception as e:
-            log(f"WARN: Could not fix DefaultStatsAPI.ini at {dsi}: {e}")
-    return False
 
 
 def load_config():
@@ -186,12 +102,90 @@ def get_db():
     return conn
 
 
-def update_status(state: str, msg: str = "", player="", friends=None):
+def init_db():
+    """Create tables if they don't exist — called once at startup."""
+    conn = get_db()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS matches_summary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            match_id INTEGER UNIQUE,
+            session_id INTEGER,
+            played_at TEXT,
+            user_score INTEGER,
+            opponent_score INTEGER,
+            result TEXT,
+            mode TEXT,
+            arena TEXT,
+            highlight_icon TEXT,
+            highlight_text TEXT,
+            highlight_value REAL,
+            goals INTEGER,
+            shots INTEGER,
+            saves INTEGER,
+            demos_given INTEGER,
+            demos_taken INTEGER,
+            FOREIGN KEY (match_id) REFERENCES matches(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_summary_played ON matches_summary(played_at DESC);
+    """)
+    conn.commit()
+    conn.close()
+    log("DB initialized: matches_summary table ready")
+
+
+def _write_summary(match_id: int):
+    """Write a pre-computed summary row for fast warm-storage queries.
+    Picks the best metric (goals/demos/shots/saves) as the highlight.
+    """
+    db = get_db()
+    match = db.execute(
+        "SELECT m.*, md.arena, md.shots, md.saves, md.demos_given, md.demos_taken "
+        "FROM matches m LEFT JOIN match_details md ON m.id = md.match_id "
+        "WHERE m.id = ?", (match_id,)
+    ).fetchone()
+    if not match:
+        db.close()
+        return
+
+    goals = match["user_score"] or 0
+    demos = match["demos_given"] or 0
+    shots = match["shots"] or 0
+    saves = match["saves"] or 0
+
+    # Pick the best metric as the highlight
+    metrics = [
+        ("⚽", "Goals", goals),
+        ("💥", "Demos", demos),
+        ("🎯", "Shots", shots),
+        ("🛡️", "Saves", saves),
+    ]
+    metrics.sort(key=lambda x: x[2], reverse=True)
+    hi_icon, hi_text, hi_value = metrics[0]
+
+    db.execute(
+        """INSERT OR REPLACE INTO matches_summary
+           (match_id, session_id, played_at, user_score, opponent_score,
+            result, mode, arena, highlight_icon, highlight_text, highlight_value,
+            goals, shots, saves, demos_given, demos_taken)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (match_id, match["session_id"], match["played_at"],
+         goals, match["opponent_score"],
+         match["result"], match["mode"], match["arena"],
+         hi_icon, hi_text, hi_value,
+         goals, shots, saves, demos, match["demos_taken"] or 0)
+    )
+    db.commit()
+    db.close()
+
+
+def update_status(state: str, msg: str = "", player="", friends=None, poll_interval=None, poll_mode=None):
     try:
         with open(STATUS_PATH, "w") as f:
             json.dump({
                 "state": state, "message": msg, "player": player,
                 "friends": friends or [],
+                "poll_interval": poll_interval,
+                "poll_mode": poll_mode,
                 "updated": datetime.now(timezone.utc).isoformat()
             }, f)
     except Exception:
@@ -212,6 +206,7 @@ class MatchState:
                  'on_ground_ticks', 'in_air_ticks', 'on_wall_ticks',
                  '_match_recorded', '_player_cache', '_friend_cache',
                  '_prev_demos', '_was_demolished',
+                 '_last_update_time', '_poll_interval', '_connected',
                  '_team_confirm_count', '_team_confirm_candidate')
 
     def __init__(self, player_name, friend_names):
@@ -220,6 +215,9 @@ class MatchState:
         self._player_cache = {}  # {name_hash: result} for fast lookups
         self._friend_cache = set(f.lower().strip() for f in friend_names if f.strip())
         self._match_recorded = False
+        self._last_update_time = 0.0
+        self._poll_interval = 60
+        self._connected = False
         self._team_confirm_count = 0
         self._team_confirm_candidate = None
         self.reset()
@@ -284,30 +282,27 @@ class MatchState:
         """
         if self.user_team_num is None:
             return None
-        target = self.player_name
-        # Pass 1: exact match on the user's team
+        # Pass 1: exact name, team-locked
         for p in players:
-            if p.get("TeamNum") != self.user_team_num:
-                continue
             pname = p.get("Name", "")
-            if pname and pname.lower() == target:
+            if (pname and pname.lower() == self.player_name
+                    and p.get("TeamNum") == self.user_team_num):
                 return p
-        # Pass 2: partial match on the user's team
+        # Pass 2: partial name, team-locked
         for p in players:
-            if p.get("TeamNum") != self.user_team_num:
-                continue
-            pname = p.get("Name", "")
+            pname = p.get("Name", "").lower()
             if not pname:
                 continue
-            pname_l = pname.lower()
-            if target in pname_l or pname_l in target:
-                return p
+            if p.get("TeamNum") == self.user_team_num:
+                if self.player_name in pname or pname in self.player_name:
+                    return p
         return None
 
     def handle_update_state(self, data):
         players = data.get("Players", [])
         game = data.get("Game", {})
         self.tick_count += 1
+        self._last_update_time = time.time()
 
         # Team detection via SPECTATOR fields (v1.3.2 fix).
         # RL API docs state SPECTATOR fields are "present only if the client
@@ -372,11 +367,9 @@ class MatchState:
             self.time_remaining = game["TimeSeconds"]
 
         # Player stats — team-locked lookup.
-        # FIX (v1.0.8): replaces the SECOND _fast_find call that previously
-        # could return a DIFFERENT player (on the wrong team) than the
-        # detection call within the same tick, causing team_num and captured
-        # stats to disagree. Now: detection locked user_team_num reliably,
-        # and _find_user_player only ever returns a player ON user_team_num.
+        # FIX (v1.0.8): _find_user_player only ever returns a player ON
+        # user_team_num, so partial matching can NEVER pick a player from
+        # the opposing team and cause stats/team_num disagreement.
         if self.user_team_num is not None and players:
             p = self._find_user_player(players)
             if p:
@@ -393,34 +386,12 @@ class MatchState:
                     self.boosting_ticks += 1
                 if p.get("bSupersonic"):
                     self.supersonic_ticks += 1
-                # FIX (v1.1.1 wall-time bug): check bOnWall BEFORE bOnGround.
-                # When driving on the wall, RL reports BOTH bOnGround=True
-                # (≥3 wheels touching world — the wall IS world geometry) AND
-                # bOnWall=True simultaneously. The old if/elif checked
-                # bOnGround first, so every wall tick fell into the ground
-                # branch and on_wall_ticks stayed 0 → Wall Time always 0%.
-                # bOnWall IS a valid SPECTATOR field per the official RL Stats
-                # API docs (confirmed via rocketleague.com/developer/stats-api
-                # and github.com/spoody999/EAC-Broadcast-Overlay/api-info.md);
-                # the original "field doesn't exist" hypothesis was wrong.
-                # Prioritizing wall over ground makes the three states
-                # mutually exclusive in the order: wall > ground > air.
-                if p.get("bOnWall"):
-                    self.on_wall_ticks += 1
-                elif p.get("bOnGround"):
+                if p.get("bOnGround"):
                     self.on_ground_ticks += 1
+                elif p.get("bOnWall"):
+                    self.on_wall_ticks += 1
                 else:
                     self.in_air_ticks += 1
-
-                # Duo re-check on every tick (friend may appear after initial detection)
-                if self.mode == "solo" and self._friend_cache and players:
-                    for fp in players:
-                        if fp.get("TeamNum") == self.user_team_num:
-                            fpname = fp.get("Name", "").lower().strip()
-                            if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
-                                self.mode = "duo"
-                                log(f"Duo detected (late join): {fp.get('Name')}")
-                                break
 
                 # Demolish tracking — diff-based from UpdateState (RL doesn't send Demolish events!)
                 demos_now = p.get("Demos", 0) or 0
@@ -469,15 +440,10 @@ class MatchState:
         session = db.execute("SELECT id FROM sessions WHERE status='active' ORDER BY started_at DESC LIMIT 1").fetchone()
         if session:
             session_id = session["id"]
-            # Dedup: skip if same scores already recorded in last 60s.
-            # Compute cutoff in Python (ISO8601) so the string comparison matches
-            # the stored played_at format — SQLite's datetime('now','-60 seconds')
-            # returns 'YYYY-MM-DD HH:MM:SS' which compares wrong against our
-            # 'YYYY-MM-DDTHH:MM:SS+00:00' stored values (T > space lexicographically).
-            cutoff = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+            # Dedup: skip if same scores already recorded in last 60s
             existing = db.execute(
-                "SELECT id FROM matches WHERE session_id=? AND user_score=? AND opponent_score=? AND played_at > ?",
-                (session_id, self.user_score, self.opponent_score, cutoff)
+                "SELECT id FROM matches WHERE session_id=? AND user_score=? AND opponent_score=? AND played_at > datetime('now', '-60 seconds')",
+                (session_id, self.user_score, self.opponent_score)
             ).fetchone()
             if existing:
                 log(f"SKIP DUP: match already recorded (id={existing['id']})")
@@ -491,6 +457,9 @@ class MatchState:
             "INSERT INTO matches (session_id, played_at, user_score, opponent_score, result, mode) VALUES (?,?,?,?,?,?)",
             (session_id, now, self.user_score, self.opponent_score, result, self.mode))
         match_id = cur.lastrowid
+        if not match_id:
+            db.close()
+            return
 
         ticks = max(self.active_tick_count, 1)  # Use active ticks only (after player found)
 
@@ -525,8 +494,19 @@ class MatchState:
                         bh.get("pre_hit"), bh.get("post_hit"), bh.get("post_hit_kph")))
         db.commit()
         db.close()
+        _write_summary(match_id)
         flush_log()
         log(f"RECORDED: {'WIN' if result == 'win' else 'LOSS'}! {self.user_score}-{self.opponent_score} [{self.mode}]")
+        # Active Coach (TRIZ #25): self-analyse immediately after recording.
+        # Runs after DB close so a coach error can never corrupt the match row.
+        # Insights are informational only - failures are logged and swallowed.
+        try:
+            res = _coach.analyze_match(match_id)
+            n = len(res.get("insights", []))
+            if n:
+                log(f"COACH: {n} insights for match {match_id}")
+        except Exception as e:
+            log(f"COACH WARN: analyze_match failed for {match_id}: {e}")
 
     @property
     def user_score(self): return self.scores[self.user_team_num] if self.user_team_num is not None else 0
@@ -546,7 +526,7 @@ def run_listener(player: str, friends: list, stop_event):
     update_status("starting", "Initializing...", player, friends)
 
     log("=" * 50)
-    log("RL Raw TCP Listener (Portable v1.1)")
+    log("RL Raw TCP Listener (Windows Portable v7 SPECTATOR)")
     log(f"   Player: {player or '(not set)'} | Friends: {', '.join(friends) if friends else 'none'}")
     log("=" * 50)
 
@@ -567,13 +547,8 @@ def run_listener(player: str, friends: list, stop_event):
             return
 
     state = MatchState(player, friends)
+    init_db()
     update_status("connecting", "Connecting to Rocket League...", player, friends)
-
-    # Capture the TAStatsAPI.ini path that was detected, so we can surface it
-    # in every connection-failure log line. This is the #1 thing friends need
-    # to see when the port stays closed — "is the INI even in the right place?"
-    _config_dir = find_rl_config_dir()
-    _ini_path_str = str(_config_dir / "TAStatsAPI.ini") if _config_dir else "(config dir not found)"
 
     reconnect_delay = 3
     max_delay = 30
@@ -592,6 +567,7 @@ def run_listener(player: str, friends: list, stop_event):
             log("Connected to Rocket League Stats API!")
             update_status("connected", "Live - tracking matches", player, friends)
             reconnect_delay = 3
+            state._connected = True
 
             buffer = ""
             pos = 0
@@ -665,7 +641,7 @@ def run_listener(player: str, friends: list, stop_event):
                             if state.user_team_num is not None and not state._match_recorded:
                                 state._match_recorded = True
                                 d = raw_data if isinstance(raw_data, dict) else (json.loads(raw_data) if isinstance(raw_data, str) else {})
-                                winner = d.get("WinnerTeamNum", d.get("Winner"))
+                                winner = FieldResolver.resolve(d, "winner")
                                 if winner is not None:
                                     if isinstance(winner, str):
                                         wn = 0 if winner.lower() == "blue" else 1
@@ -686,18 +662,29 @@ def run_listener(player: str, friends: list, stop_event):
 
                         elif event == "GoalScored":
                             d = raw_data if isinstance(raw_data, dict) else (json.loads(raw_data) if isinstance(raw_data, str) else {})
-                            scorer = d.get("Scorer", {})
-                            sname = scorer.get("Name", "")
+                            scorer = FieldResolver.resolve_raw(d, "scorer") or {}
+                            # Scorer var būt dict (ar Name/TeamNum) vai vienkārši string
+                            if isinstance(scorer, dict):
+                                sname = scorer.get("Name") or scorer.get("name") or ""
+                                steam = scorer.get("TeamNum", -1)
+                            else:
+                                sname = str(scorer or "")
+                                steam = -1
+                                # Mēģinām uzminēt komandu no top-level
+                                steam = FieldResolver.resolve(d, "team_num")
+                                if steam is None:
+                                    steam = -1
                             if not sname:
                                 pos += end; continue
-                            steam = scorer.get("TeamNum", -1)
                             if steam in (0, 1):
                                 state.scores[steam] = state.scores[steam] + 1
-                            gs = d.get("GoalSpeed")
-                            speed_kph = round(gs, 1) if gs is not None else None  # GoalSpeed already in km/h
+                            gs = FieldResolver.resolve(d, "goal_speed")
+                            speed_kph = round(gs, 1) if gs else None  # GoalSpeed already in km/h
+                            assister = FieldResolver.resolve_raw(d, "assister")
+                            aname = (assister.get("Name") or assister.get("name")) if isinstance(assister, dict) else (assister or None)
                             state.goals.append({
                                 "scored_at": datetime.now(timezone.utc).isoformat(),
-                                "scorer": sname, "assister": d.get("Assister", {}).get("Name") or None,
+                                "scorer": sname, "assister": aname,
                                 "team_num": steam, "speed_kph": speed_kph,
                                 "time_remaining": state.time_remaining})
 
@@ -716,13 +703,31 @@ def run_listener(player: str, friends: list, stop_event):
 
                         elif event == "Demolish":
                             d = raw_data if isinstance(raw_data, dict) else {}
-                            # RL may send different field names — try them all
-                            att = d.get("Attacker") or d.get("attacker") or d.get("AttackerName") or d.get("attacker_name") or ""
-                            vic = d.get("Victim") or d.get("victim") or d.get("VictimName") or d.get("victim_name") or ""
-                            # If these are dicts, extract Name
-                            an = att.get("Name", "") if isinstance(att, dict) else str(att or "")
-                            vn = vic.get("Name", "") if isinstance(vic, dict) else str(vic or "")
-                            an_l = an.lower(); vn_l = vn.lower()
+                            # Semantiskais field resolver — atrast attacker/victim pēc jebkura zināma nosaukuma
+                            an = FieldResolver.resolve(d, "attacker")
+                            vn = FieldResolver.resolve(d, "victim")
+                            # Ja netika atrasts, mēģinām uzminēt pēc tipa (pirmā divi str lauki)
+                            if not an:
+                                key, val = FieldResolver.guess_by_type(d, str)
+                                if key and val:
+                                    an = val
+                                    log(FieldResolver.raw_dump(d, "DEMO attacker guessed"))
+                            if not vn:
+                                keys_to_skip = {"Event"}
+                                if an:
+                                    keys_to_skip.add(str(an))
+                                # Otrais str lauks, izlaižot jau atrasto attacker
+                                for k, v in d.items():
+                                    if k in keys_to_skip or k.startswith("_") or k.startswith("MatchGuid"):
+                                        continue
+                                    if isinstance(v, str) and v:
+                                        vn = v
+                                        break
+                                    if isinstance(v, dict) and (v.get("Name") or v.get("name")):
+                                        vn = v.get("Name") or v.get("name")
+                                        break
+                            an_l = (an or "").lower()
+                            vn_l = (vn or "").lower()
                             if an_l and (state.player_name in an_l or an_l in state.player_name):
                                 state.demos_given += 1
                                 log(f"DEMO GIVEN: {an}")
@@ -730,8 +735,8 @@ def run_listener(player: str, friends: list, stop_event):
                                 state.demos_taken += 1
                                 log(f"DEMO TAKEN: {vn}")
                             else:
-                                # RAW dump for debugging unknown format
-                                log(f"DEMO RAW: attacker={att}, victim={vic}, d={d}")
+                                # RAW dump kad nekas nestrādā
+                                log(FieldResolver.raw_dump(d, "DEMO UNKNOWN FORMAT"))
 
                         elif event == "OverTimeBegin":
                             state.is_overtime = True
@@ -774,24 +779,18 @@ def run_listener(player: str, friends: list, stop_event):
                     last_flush = now
 
             # Connection ended
+            state._connected = False
+            state._poll_interval = 60
             sock.close()
-            # Do NOT record in-progress matches on disconnect — a dropped
-            # connection is not a match-end signal. Recording partial scores
-            # creates false "loss" entries when the player rage-quits or RL
-            # crashes. Match-end events (bHasWinner/MatchEnded/MatchDestroyed)
-            # are the only authoritative signals. Just reset state.
             if state.user_team_num is not None and state.tick_count > 0:
-                log(f"Connection dropped mid-match (scores: {state.scores[0]}-{state.scores[1]}). Not recording — match was not finished.")
-            state.reset()
+                res = "win" if state.user_score > state.opponent_score else "loss"
+                log(f"Saving in-progress match: {res}")
+                state.record_match(res)
+                state.reset()
 
-        except (ConnectionRefusedError, socket.timeout) as e:
+        except (ConnectionRefusedError, socket.timeout):
             update_status("disconnected", "RL not running", player, friends)
-            # v1.0.7: classify the error so the log shows Timeout vs Refused.
-            # Timeout on 127.0.0.1 is a strong signal of a WFP filter driver
-            # (VPN/AV) OR a WSL2 port-relay (wslrelay.exe) dropping SYNs
-            # silently — see /api/rl-diagnostics for the WSL2 detection block.
-            err_cls = "TIMEOUT (WSL2 relay? VPN filter driver? run Diagnostics)" if isinstance(e, socket.timeout) else "REFUSED (RL not listening)"
-            log(f"RL not available - retrying in {reconnect_delay}s... | error={type(e).__name__} ({err_cls}) | TAStatsAPI.ini at: {_ini_path_str} | TIP: Rocket League reads TAStatsAPI.ini only at startup — fully quit and restart RL if the port stays closed. NOTE: the Stats API port only opens DURING a match (per Psyonix docs). If you have WSL2 installed, run 'wsl --shutdown' in PowerShell — wslrelay.exe can grab 127.0.0.1:49123 and silently drop SYNs.")
+            log(f"RL not available - retrying in {reconnect_delay}s...")
         except Exception as e:
             log(f"Error: {e}")
 
@@ -799,8 +798,19 @@ def run_listener(player: str, friends: list, stop_event):
         except Exception: pass
         if stop_event.is_set(): break
 
-        time.sleep(reconnect_delay)
-        reconnect_delay = min(reconnect_delay * 1.5, max_delay)
+        # Elpojošs polling — adaptīvs intervāls atkarībā no datu plūsmas
+        now = time.time()
+        if state._connected and state._last_update_time > 0:
+            gap = now - state._last_update_time
+            state._poll_interval = 2 if gap < 5 else 15 if gap < 30 else 60
+        else:
+            state._poll_interval = 60
+        poll_mode = "hot" if state._poll_interval == 2 else "warm" if state._poll_interval == 15 else "cold"
+        update_status("disconnected" if not state._connected else "connected",
+                      "Reconnecting..." if not state._connected else f"Polling ({poll_mode})",
+                      player, friends,
+                      poll_interval=state._poll_interval, poll_mode=poll_mode)
+        time.sleep(min(state._poll_interval, 2))
 
     flush_log()
     log("Listener stopped")
