@@ -78,6 +78,10 @@ def main():
     else:
         print("  ⚠️  Waitress not installed — falling back to Flask dev server")
         app.run(host="127.0.0.1", port=port, debug=False)
+    # Belt-and-suspenders: if /api/quit set the flag, exit NOW
+    if app.config.get("_should_exit"):
+        print("👋 Shutting down via /api/quit...")
+        os._exit(0)
     stop_event.set()
     print("👋 Shutting down...")
 

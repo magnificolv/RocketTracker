@@ -233,10 +233,18 @@ def deep_stats():
 
 @app.route("/api/quit", methods=["POST"])
 def quit_tracker():
+    """Graceful shutdown: sets stop_event, returns response, then hard-exits.
+    Uses a non-daemon Timer so the thread is guaranteed to fire even if
+    the WSGI server tries to clean up daemon threads. The main.py run loop
+    also checks app.config['_should_exit'] after serve() returns as a
+    belt-and-suspenders fallback."""
     ev = app.config.get("listener_stop_event")
     if ev: ev.set()
-    def _exit(): import time as _t; _t.sleep(0.5); _os._exit(0)
-    _th.Thread(target=_exit, daemon=True).start()
+    app.config["_should_exit"] = True
+    # Non-daemon Timer — survives WSGI worker thread cleanup
+    t = _th.Timer(0.3, lambda: _os._exit(0))
+    t.daemon = False
+    t.start()
     return jsonify({"shutdown": True, "message": "Tracker shutting down..."})
 
 @app.route("/api/coach/match/<int:match_id>")
