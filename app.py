@@ -1,7 +1,7 @@
 """
 Rocket League Tracker - Flask API (Portable Edition)
 """
-import json, sqlite3, os as _os, sys, threading as _th
+import json, sqlite3, os as _os, sys, io, threading as _th
 from datetime import datetime, timezone
 from pathlib import Path
 import yaml
@@ -14,13 +14,16 @@ if getattr(sys, 'frozen', False):
 else:
     BASE_DIR = Path(__file__).parent
 CONFIG_PATH = BASE_DIR / "config.yaml"
-DB_PATH = BASE_DIR / "data.db"
+DB_PATH = BASE_DIR / "data-v2.db"
+
+# v1.1: Auto-update check against GitHub releases.
+APP_VERSION = "2.0.0"
+GITHUB_REPO = "magnificolv/RocketTracker"
+GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 app = Flask(__name__, static_folder="dashboard", static_url_path="")
 
-import os
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data-v2.db")
-coach = CoachEngine(DB_PATH)
+coach = CoachEngine(str(DB_PATH))
 
 @app.after_request
 def cors(r):
@@ -182,7 +185,163 @@ def player_config():
 @app.route("/api/status")
 def api_status():
     c = load_config()
-    return jsonify({"ok": True, "app": "RL Tracker v2.0", "version": "2.0.0", "player_configured": bool(c.get("player", {}).get("name"))})
+    return jsonify({"ok": True, "app": f"RL Tracker v{APP_VERSION}", "version": APP_VERSION, "player_configured": bool(c.get("player", {}).get("name"))})
+
+# ====== v1.1: Auto-update check ======
+def _parse_semver(v):
+    """Parse 'v1.0.9' / '1.1' / '1.0.9-rc1' into a 3-tuple of ints for comparison.
+    Non-numeric suffixes are stripped, so '1.0.9-rc1' == '1.0.9' numerically.
+    Pads to exactly 3 components so '1.1' == '1.1.0'."""
+    s = str(v).strip().lstrip("vV")
+    parts = []
+    for p in s.split("."):
+        num = ""
+        for ch in p:
+            if ch.isdigit(): num += ch
+            else: break
+        parts.append(int(num) if num else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts[:3])
+
+@app.route("/api/check-update")
+def check_update():
+    """v1.1: Compare the running APP_VERSION against the latest GitHub release."""
+    import urllib.request, urllib.error
+    try:
+        req = urllib.request.Request(GITHUB_RELEASES_API, headers={
+            "User-Agent": f"RocketTracker/{APP_VERSION}",
+            "Accept": "application/vnd.github+json",
+        })
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return jsonify({"ok": False, "error": f"GitHub API returned HTTP {e.code}", "current": APP_VERSION})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Cannot reach GitHub ({e.__class__.__name__})", "current": APP_VERSION})
+
+    tag = data.get("tag_name", "") or ""
+    latest = tag.lstrip("vV")
+    download_url = None
+    for a in data.get("assets", []) or []:
+        if (a.get("name") or "").lower().endswith(".zip"):
+            download_url = a.get("browser_download_url"); break
+    if not download_url:
+        download_url = data.get("html_url")
+
+    return jsonify({
+        "ok": True,
+        "current": APP_VERSION,
+        "latest": latest,
+        "latest_tag": tag,
+        "update_available": _parse_semver(latest) > _parse_semver(APP_VERSION),
+        "release_name": data.get("name") or tag,
+        "release_url": data.get("html_url"),
+        "download_url": download_url,
+        "release_notes": data.get("body") or "",
+        "published_at": data.get("published_at"),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+@app.route("/api/update", methods=["POST"])
+def update_tracker():
+    """v1.3.0: One-click seamless update.
+    Downloads the latest release ZIP from GitHub, extracts to temp,
+    copies data-v2.db + config.yaml, writes updater.bat, launches it, exits."""
+    import urllib.request, urllib.error
+    import zipfile, tempfile, shutil
+
+    try:
+        req = urllib.request.Request(GITHUB_RELEASES_API, headers={
+            "User-Agent": f"RocketTracker/{APP_VERSION}",
+            "Accept": "application/vnd.github+json",
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            release = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return jsonify({"ok": False, "error": f"GitHub API returned HTTP {e.code}"}), 502
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Cannot reach GitHub ({e.__class__.__name__}: {e})"}), 502
+
+    zip_url = None
+    for a in release.get("assets", []) or []:
+        name = (a.get("name") or "").lower()
+        if name.endswith(".zip"):
+            zip_url = a.get("browser_download_url")
+            break
+    if not zip_url:
+        zip_url = release.get("zipball_url")
+    if not zip_url:
+        return jsonify({"ok": False, "error": "No downloadable .zip asset found in the latest release"}), 404
+
+    tag = release.get("tag_name", "unknown")
+    new_version = tag.lstrip("vV")
+
+    try:
+        req = urllib.request.Request(zip_url, headers={"User-Agent": f"RocketTracker/{APP_VERSION}"})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            zip_bytes = resp.read()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Download failed ({e.__class__.__name__}: {e})"}), 502
+
+    tmp_root = Path(tempfile.gettempdir()) / "rl-tracker-update"
+    if tmp_root.exists():
+        shutil.rmtree(str(tmp_root), ignore_errors=True)
+    tmp_root.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            zf.extractall(str(tmp_root))
+    except Exception as e:
+        shutil.rmtree(str(tmp_root), ignore_errors=True)
+        return jsonify({"ok": False, "error": f"ZIP extraction failed ({e})"}), 500
+
+    children = list(tmp_root.iterdir())
+    if len(children) == 1 and children[0].is_dir():
+        tmp_root = children[0]
+
+    new_exe = None
+    for f in tmp_root.glob("*.exe"):
+        new_exe = f
+        break
+    if not new_exe:
+        shutil.rmtree(str(tmp_root.parent), ignore_errors=True)
+        return jsonify({"ok": False, "error": "No .exe found in the downloaded archive"}), 500
+
+    # Preserve user data
+    for fname in ["data-v2.db", "config.yaml"]:
+        src = BASE_DIR / fname
+        if src.exists():
+            try:
+                shutil.copy2(str(src), str(tmp_root / fname))
+            except Exception:
+                pass
+
+    # Write updater.bat
+    bat_path = tmp_root / "updater.bat"
+    exe_name = new_exe.name
+    bat_path.write_text(
+        f'@echo off\r\n'
+        f'timeout /t 2 /nobreak >nul\r\n'
+        f'taskkill /f /im "RL-Tracker*" >nul 2>&1\r\n'
+        f'xcopy /Y /E "%~dp0*" "{BASE_DIR}\\\\" >nul\r\n'
+        f'start "" "{BASE_DIR}\\\\{exe_name}"\r\n'
+        f'rmdir /s /q "%~dp0" >nul 2>&1\r\n'
+        f'del "%~f0" >nul 2>&1\r\n'
+    )
+
+    try:
+        _os.startfile(str(bat_path))
+    except Exception:
+        import subprocess
+        subprocess.Popen(["cmd", "/c", str(bat_path)], shell=True)
+
+    def _do_exit():
+        import time as _t
+        _t.sleep(0.5)
+        _os._exit(0)
+    _th.Thread(target=_do_exit, daemon=True).start()
+    return jsonify({"ok": True, "message": f"Updating to v{new_version}...", "new_version": new_version})
 
 @app.route("/api/rl-config", methods=["GET"])
 def rl_config_status():
@@ -195,8 +354,9 @@ def rl_config_status():
 
 @app.route("/api/rl-config", methods=["POST"])
 def rl_config_create():
-    from listener import ensure_tastatsapi_ini
+    from listener import ensure_tastatsapi_ini, ensure_default_statsapi_ini
     ok = ensure_tastatsapi_ini()
+    ensure_default_statsapi_ini()
     return jsonify({"created": ok, "message": "TAStatsAPI.ini created" if ok else "Could not create"})
 
 @app.route("/api/stats/deep")

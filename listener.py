@@ -82,6 +82,35 @@ def ensure_tastatsapi_ini():
         return False
 
 
+def ensure_default_statsapi_ini():
+    """v1.3.0: Fix Epic Games bug — DefaultStatsAPI.ini in RL install dir
+    sometimes has PacketSendRate=0. This overrides the Documents INI."""
+    import winreg
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+            r"Software\Valve\Steam\Apps\252950")
+        rl_dir_str, _ = winreg.QueryValueEx(key, "InstalledDepots")
+        for line in rl_dir_str.splitlines():
+            parts = line.strip().split()
+            if parts and parts[0] == "252950":
+                rl_path = Path(parts[-1].strip('"'))
+                if rl_path.exists():
+                    ini = rl_path / "TAGame" / "Config" / "DefaultStatsAPI.ini"
+                    if ini.exists():
+                        content = ini.read_text()
+                        if "PacketSendRate=0" in content:
+                            ini.write_text(content.replace("PacketSendRate=0", "PacketSendRate=30"))
+                            log("OK: DefaultStatsAPI.ini fixed (PacketSendRate 0→30)")
+                        else:
+                            log("OK: DefaultStatsAPI.ini already correct")
+                    else:
+                        log("INFO: DefaultStatsAPI.ini not found in RL install dir")
+                    return True
+    except Exception:
+        pass
+    return False
+
+
 def load_config():
     try:
         import yaml

@@ -116,7 +116,7 @@ body{font-family:var(--font);background:var(--bg-primary);background-image:url('
 
 <div class="listener-bar"><div class="dot dot-off" id="listener-dot"></div><span id="listener-msg">Auto-tracker: not running</span></div>
 
-<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">RL Tracker 2.0.0</p></div>
+<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">RL Tracker 2.0.0 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:600;font-size:.72rem">● Update available</span></p></div>
 
 <nav class="nav"><button class="nav-btn active" data-tab="active-session">🎮 Active Session</button><button class="nav-btn" data-tab="history">📋 History</button><button class="nav-btn" data-tab="stats">📊 Stats</button><button class="nav-btn" data-tab="coach">🏆 Coach</button></nav>
 
@@ -148,6 +148,12 @@ body{font-family:var(--font);background:var(--bg-primary);background-image:url('
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:.82rem;font-weight:600">🔧 RL Stats API Config</span><span id="rl-config-badge" style="font-size:.7rem;padding:2px 8px;border-radius:50px;background:var(--bg-card)">Checking...</span></div>
 <p id="rl-config-msg" style="font-size:.72rem;color:var(--text-secondary);margin-bottom:8px"></p>
 <div style="display:flex;gap:6px"><button class="btn btn-ghost" onclick="checkRlConfig()" style="font-size:.72rem">🔄 Check</button><button class="btn btn-primary" onclick="createRlConfig()" style="font-size:.72rem">📝 Auto-Create</button></div></div>
+<div style="background:var(--bg-input);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:.82rem;font-weight:600">🔄 Auto-Update</span><span id="update-badge-modal" style="font-size:.7rem;padding:2px 8px;border-radius:50px;background:var(--bg-card)">Not checked</span></div>
+<p style="font-size:.72rem;color:var(--text-secondary);margin-bottom:8px">Checks GitHub for newer releases of RocketTracker.</p>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="checkForUpdates()" style="font-size:.72rem;border-color:var(--border-active);color:var(--border-active)">🔄 Check for Updates</button></div>
+<div id="update-results" style="display:none;margin-top:12px;padding:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.78rem"></div>
+</div>
 <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" onclick="toggleSettings()">Cancel</button><button class="btn btn-primary" onclick="saveSettings()">💾 Save</button></div></div></div>
 
 <script>
@@ -495,10 +501,79 @@ async function createRlConfig(){const b=document.getElementById('rl-config-badge
 
 // ====== Exit ======
 async function exitTracker(){if(!confirm('Exit RL Tracker?'))return;try{await api('/api/quit',{method:'POST'})}catch(e){}showToast('👋 Tracker shut down.');setTimeout(()=>window.close(),500)}
+async function checkForUpdates(){
+  const box=document.getElementById('update-results');
+  const badge=document.getElementById('update-badge-modal');
+  box.style.display='block';
+  box.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div>Checking GitHub for updates...</div>';
+  if(badge){badge.textContent='Checking...';badge.style.color='var(--text-muted)'}
+  let d;
+  try{d=await api('/api/check-update')}
+  catch(e){box.innerHTML='<p style="color:var(--red)">❌ Could not check: '+e.message+'</p>';if(badge){badge.textContent='❌ Error';badge.style.color='var(--red)'}return}
+  if(!d.ok){box.innerHTML='<p style="color:var(--red)">❌ '+d.error+'</p>';if(badge){badge.textContent='❌ Error';badge.style.color='var(--red)'}return}
+  renderUpdateResult(d);
+}
+function renderUpdateResult(d){
+  const box=document.getElementById('update-results');
+  const badge=document.getElementById('update-badge-modal');
+  let html='<div style="font-weight:700;margin-bottom:8px;color:var(--text-primary)">🔄 Update Check</div>';
+  if(d.update_available){
+    if(badge){badge.textContent='⬆️ v'+d.latest+' available';badge.style.color='var(--orange)'}
+    html+='<div style="margin-bottom:8px;padding:10px;background:rgba(255,107,53,0.08);border:1px solid var(--orange);border-radius:6px">';
+    html+='<div style="font-weight:700;color:var(--orange)">⬆️ Update available!</div>';
+    html+='<div style="font-size:.74rem;color:var(--text-secondary);margin-top:4px">v'+d.current+' → <b>v'+d.latest+'</b></div>';
+    if(d.release_name){html+='<div style="font-size:.78rem;margin-top:6px;font-weight:600">'+d.release_name+'</div>'}
+    if(d.release_notes){html+='<div style="font-size:.72rem;color:var(--text-muted);margin-top:6px;white-space:pre-wrap;max-height:140px;overflow:auto;border-top:1px solid var(--border);padding-top:6px">'+d.release_notes.replace(/</g,'&lt;')+'</div>'}
+    if(d.published_at){html+='<div style="font-size:.68rem;color:var(--text-muted);margin-top:6px">Published '+d.published_at.split('T')[0]+'</div>'}
+    html+='<div style="display:flex;gap:6px;margin-top:10px"><a href="'+d.download_url+'" target="_blank" class="btn btn-primary" style="font-size:.72rem;text-decoration:none">⬇️ Download v'+d.latest+'</a><a href="'+(d.release_url||'#')+'" target="_blank" class="btn btn-ghost" style="font-size:.72rem;text-decoration:none">📄 Release page</a></div>';
+    html+='<button onclick="performUpdate()" class="btn" style="display:block;width:100%;margin-top:8px;font-size:.75rem;padding:10px 22px;background:linear-gradient(135deg,#f97316,#ef4444);color:white;border:none;font-weight:700;cursor:pointer">⚡ One-Click Update (auto-install + restart)</button>';
+    html+='<p style="font-size:.68rem;color:var(--text-muted);margin-top:6px">Downloads, installs, preserves your data, and restarts automatically.</p>';
+    html+='<div id="update-progress" style="display:none;margin-top:8px;padding:10px;background:rgba(249,115,22,0.1);border:1px solid var(--orange);border-radius:6px;font-size:.74rem"></div>';
+    html+='</div>';
+  }else{
+    if(badge){badge.textContent='✅ v'+d.latest+' latest';badge.style.color='var(--green)'}
+    html+='<div style="padding:10px;background:rgba(34,197,94,0.08);border:1px solid var(--green);border-radius:6px">';
+    html+='<div style="font-weight:700;color:var(--green)">✅ You\'re up to date!</div>';
+    html+='<div style="font-size:.74rem;color:var(--text-secondary);margin-top:4px">Running v'+d.current+' (latest release: v'+(d.latest||'?')+')</div>';
+    html+='</div>';
+  }
+  box.innerHTML=html;
+}
+async function silentUpdateCheck(){
+  try{
+    const d=await api('/api/check-update');
+    if(d.ok&&d.update_available){
+      const b=document.getElementById('update-badge');
+      if(b){b.style.display='inline';b.textContent='● Update available (v'+d.latest+') — click to view'}
+    }
+  }catch(e){}
+}
+async function performUpdate(){
+  const prog=document.getElementById('update-progress');
+  if(!prog)return;
+  prog.style.display='block';
+  prog.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div class="spinner"></div><span>Downloading update...</span></div>';
+  try{
+    const r=await api('/api/update',{method:'POST'});
+    if(r.ok){
+      prog.innerHTML='<div style="color:var(--green);font-weight:700">✅ '+r.message+'</div><div style="font-size:.68rem;color:var(--text-muted);margin-top:4px">The tracker will restart in a moment...</div>';
+      showToast('🔄 Updating to v'+r.new_version+'...');
+    }else{
+      prog.innerHTML='<div style="color:var(--red);font-weight:600">❌ Update failed</div><div style="font-size:.72rem;color:var(--text-secondary);margin-top:4px">'+r.error+'</div>';
+    }
+  }catch(e){
+    if(e.message.includes('not reachable')||e.message.includes('Failed to fetch')){
+      prog.innerHTML='<div style="color:var(--green);font-weight:700">✅ Update launched!</div><div style="font-size:.68rem;color:var(--text-muted);margin-top:4px">Tracker is restarting with new version. You can close this window.</div>';
+      showToast('🔄 Tracker is restarting...');
+    }else{
+      prog.innerHTML='<div style="color:var(--red);font-weight:600">❌ Update failed</div><div style="font-size:.72rem;color:var(--text-secondary);margin-top:4px">'+e.message+'</div>';
+    }
+  }
+}
 
 document.getElementById('settings-modal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('settings-modal').style.display='none'});
-loadActiveSession();loadMatryoshka();listenerPollInterval=setInterval(pollListenerStatus,10000);pollListenerStatus();
+loadActiveSession();loadMatryoshka();listenerPollInterval=setInterval(pollListenerStatus,10000);pollListenerStatus();silentUpdateCheck();
 (async function firstRunCheck(){try{const c=await api('/api/config');if(!c.name)setTimeout(()=>{toggleSettings();showToast('👋 Welcome! Enter your RL nickname.')},1500)}catch(e){setTimeout(()=>showToast('⚠️ Could not connect to server.'),2000)}})();
 </script>
 </body></html>
