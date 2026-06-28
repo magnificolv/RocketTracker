@@ -1,4 +1,4 @@
-# 🚀 Rocket League Match Tracker v2.0.0-dev
+# 🚀 Rocket League Match Tracker v2.0.0
 
 > **Portable Windows App** — no Python, no WSL, no install. Double-click to run.
 
@@ -28,10 +28,10 @@ Track your Rocket League matches automatically. Stats, history, deep analytics �
 ## 📦 Installation
 
 ### 1. Download
-Get the latest `RL-Tracker-v2.0.0-dev` from [Releases](https://github.com/magnificolv/RocketTracker/releases).
+Get the latest `RL-Tracker-v2.0.0` from [Releases](https://github.com/magnificolv/RocketTracker/releases).
 
 ### 2. Run
-Double-click `RL-Tracker-v2.0.0-dev`. A console window opens — **keep it running**.
+Double-click `RL-Tracker-v2.0.0`. A console window opens — **keep it running**.
 
 ### 3. Open Dashboard
 Your browser opens automatically at `http://localhost:3010`.
@@ -77,7 +77,7 @@ The tracker auto-connects. Status dot turns 🟢 green when tracking is live. Pl
 
 ## 🛠️ For Friends
 
-1. Download `RL-Tracker-v2.0.0-dev`
+1. Download `RL-Tracker-v2.0.0`
 2. Double-click to run
 3. Enter YOUR Rocket League display name in Settings
 4. Play!
@@ -90,7 +90,7 @@ Each player needs their own `config.yaml` with their name. The tracker auto-crea
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v2.0.0-dev** | Jun 27, 2026 | Dev branch setup — coach scaffold, data-v2.db, 2.0.0-dev version bump |
+| **v2.0.0** | Jun 27, 2026 | Coach engine, Matryoshka UI, SPECTATOR team detection, Waitress server |
 | v9g | Jun 16, 2026 | Custom icon, all features stable |
 | v1-v8 | Jun 10-15, 2026 | Internal development (dedup, demolish tracking, deep stats, PyInstaller builds) |
 
