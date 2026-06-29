@@ -236,7 +236,8 @@ class MatchState:
                  '_match_recorded', '_player_cache', '_friend_cache',
                  '_prev_demos', '_was_demolished',
                  '_last_update_time', '_poll_interval', '_connected',
-                 '_team_confirm_count', '_team_confirm_candidate')
+                 '_team_confirm_count', '_team_confirm_candidate',
+                 '_cross_check_fails')
 
     def __init__(self, player_name, friend_names):
         self.player_name = player_name.lower().strip()
@@ -249,6 +250,7 @@ class MatchState:
         self._connected = False
         self._team_confirm_count = 0
         self._team_confirm_candidate = None
+        self._cross_check_fails = 0
         self.reset()
 
     def reset(self):
@@ -272,6 +274,7 @@ class MatchState:
         self._was_demolished = False
         self._team_confirm_count = 0
         self._team_confirm_candidate = None
+        self._cross_check_fails = 0
 
     def _fast_find(self, players, target):
         """Two-pass player lookup. Pass 1: exact (case-insensitive) match
@@ -333,16 +336,18 @@ class MatchState:
         self.tick_count += 1
         self._last_update_time = time.time()
 
-        # Team detection via SPECTATOR fields (v1.3.2 fix).
-        # RL API docs state SPECTATOR fields are "present only if the client
-        # is spectating or on the player's team." SPECTATOR fields include:
-        # bHasCar, Speed, Boost, bBoosting, bOnGround, bOnWall, bPowersliding,
-        # bDemolished, bSupersonic.
+        # Team detection via SPECTATOR fields + name-based cross-check (v2.0.2).
+        # SPECTATOR: bHasCar is a SPECTATOR field — RL docs say "present only if
+        # the client is spectating or on the player's team." We use it as primary.
         #
-        # We use bHasCar as the team indicator: if ANY player on a team has
-        # bHasCar, that team IS the user's team. This is 100% reliable —
-        # no name-matching, no guessing TeamNum from the wrong player.
-        # Confirmation count (3 ticks) prevents false locks during loading.
+        # CROSS-CHECK: after 3 consistent SPECTATOR ticks, we verify the user's
+        # name is actually on that team via _find_user_player. If the name can't
+        # be found on the SPECTATOR-detected team for 5 consecutive ticks after
+        # lock, the detection was wrong — unlock and retry.
+        #
+        # FALLBACK: if SPECTATOR can't determine team after 10 attempts (all
+        # players have invalid TeamNum or no bHasCar), fall back to name-based
+        # _fast_find on any team.
         if self.user_team_num is None and players:
             for p in players:
                 if "bHasCar" in p:
@@ -351,25 +356,29 @@ class MatchState:
                         if candidate == self._team_confirm_candidate:
                             self._team_confirm_count += 1
                             if self._team_confirm_count >= 3:
-                                self.user_team_num = candidate
-                                team_name = "Blue" if candidate == 0 else "Orange"
-                                log(f"Team DETECTED via SPECTATOR (bHasCar): {candidate} ({team_name}) after {self._team_confirm_count} ticks")
-                                # Now find the user's actual player on this team
+                                # Cross-check: is user's name on this team?
                                 up = self._find_user_player(players)
                                 if up:
+                                    self.user_team_num = candidate
+                                    team_name = "Blue" if candidate == 0 else "Orange"
+                                    self._cross_check_fails = 0
+                                    log(f"Team DETECTED via SPECTATOR + name cross-check: {candidate} ({team_name}) after {self._team_confirm_count} ticks")
                                     log(f"FOUND PLAYER: {up.get('Name')} on Team {candidate} ({team_name}) [scores: {self.scores}]")
                                     update_status("connected", f"Live - tracking {up.get('Name')}", self.player_name)
+                                    # Duo detection
+                                    if self._friend_cache:
+                                        for fp in players:
+                                            if fp.get("TeamNum") == self.user_team_num and fp is not up:
+                                                fpname = fp.get("Name", "").lower().strip()
+                                                if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
+                                                    self.mode = "duo"
+                                                    log(f"Duo detected: {fp.get('Name')}")
+                                                    break
                                 else:
-                                    log(f"WARNING: team {candidate} confirmed but user player '{self.player_name}' not found on that team")
-                                # Duo detection at lock time (also re-checked every tick below)
-                                if self._friend_cache:
-                                    for fp in players:
-                                        if fp.get("TeamNum") == self.user_team_num and fp is not up:
-                                            fpname = fp.get("Name", "").lower().strip()
-                                            if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
-                                                self.mode = "duo"
-                                                log(f"Duo detected: {fp.get('Name')}")
-                                                break
+                                    # SPECTATOR says team X but user's name not found there
+                                    log(f"SPECTATOR candidate {candidate} but user '{self.player_name}' NOT on that team — will retry")
+                                    self._team_confirm_count = 0
+                                    self._team_confirm_candidate = None
                         else:
                             # Different team — reset counter
                             team_name_new = "Blue" if candidate == 0 else "Orange"
@@ -377,8 +386,23 @@ class MatchState:
                             log(f"SPECTATOR team CHANGED: {team_name_old} → {team_name_new}; resetting confirmation count")
                             self._team_confirm_candidate = candidate
                             self._team_confirm_count = 1
-                        break  # Found valid team — stop scanning
+                        break  # Found valid team candidate — stop scanning
                     # else: TeamNum invalid (-1/None) — skip this player, check next one
+
+        # Post-lock cross-check: if user disappears from detected team for 5+
+        # consecutive ticks, the detection was wrong — unlock and retry.
+        if self.user_team_num is not None and players:
+            up = self._find_user_player(players)
+            if up is None:
+                self._cross_check_fails += 1
+                if self._cross_check_fails >= 5:
+                    log(f"User '{self.player_name}' not found on team {self.user_team_num} for {self._cross_check_fails} ticks — unlocking team!")
+                    self.user_team_num = None
+                    self._team_confirm_count = 0
+                    self._team_confirm_candidate = None
+                    self._cross_check_fails = 0
+            else:
+                self._cross_check_fails = 0
 
         # Scores (fast)
         teams = game.get("Teams", ())
