@@ -17,7 +17,7 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data-v2.db"
 
 # v1.1: Auto-update check against GitHub releases.
-APP_VERSION = "2.0.5"
+APP_VERSION = "2.0.6"
 GITHUB_REPO = "magnificolv/RocketTracker"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
