@@ -17,7 +17,7 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data-v2.db"
 
 # v1.1: Auto-update check against GitHub releases.
-APP_VERSION = "2.0.3"
+APP_VERSION = "2.0.4"
 GITHUB_REPO = "magnificolv/RocketTracker"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -159,8 +159,8 @@ def stats():
     s = dict(conn.execute("SELECT COUNT(*) as total, SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses FROM matches WHERE mode='solo'").fetchone())
     d = dict(conn.execute("SELECT COUNT(*) as total, SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses FROM matches WHERE mode='duo'").fetchone())
     rec = conn.execute("SELECT result, user_score, opponent_score, mode, played_at FROM matches ORDER BY played_at DESC LIMIT 20").fetchall()
-    rec_solo = conn.execute("SELECT result FROM matches WHERE mode='solo' ORDER BY played_at DESC LIMIT 10").fetchall()
-    rec_duo = conn.execute("SELECT result FROM matches WHERE mode='duo' ORDER BY played_at DESC LIMIT 10").fetchall()
+    rec_solo = conn.execute("SELECT result FROM matches WHERE mode='solo' ORDER BY played_at DESC LIMIT 20").fetchall()
+    rec_duo = conn.execute("SELECT result FROM matches WHERE mode='duo' ORDER BY played_at DESC LIMIT 20").fetchall()
     sc = conn.execute("SELECT COUNT(*) as total FROM sessions").fetchone()["total"]; cc = conn.execute("SELECT COUNT(*) as total FROM sessions WHERE status='completed'").fetchone()["total"]
     conn.close()
     return jsonify({"overall": o, "solo": s, "duo": d, "recent": [dict(r) for r in rec], "recent_solo": [r["result"] for r in rec_solo], "recent_duo": [r["result"] for r in rec_duo], "sessions": {"total": sc, "completed": cc}, "duo_by_friend": []})
