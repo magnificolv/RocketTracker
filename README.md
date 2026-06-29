@@ -1,4 +1,4 @@
-# 🚀 Rocket League Match Tracker v2.0.2
+# 🚀 Rocket League Match Tracker v2.0.3
 
 <p align="center">
   <a href="https://github.com/magnificolv/RocketTracker/releases/latest"><img src="https://img.shields.io/github/v/release/magnificolv/RocketTracker?style=flat-square&label=version&color=blue" alt="Version"></a>
@@ -50,10 +50,10 @@
 ## ✨ What It Tracks
 
 ### 1. Download
-Get the latest `RL-Tracker-v2.0.2` from [Releases](https://github.com/magnificolv/RocketTracker/releases).
+Get the latest `RL-Tracker-v2.0.3` from [Releases](https://github.com/magnificolv/RocketTracker/releases).
 
 ### 2. Run
-Double-click `RL-Tracker-v2.0.2`. A console window opens — **keep it running**.
+Double-click `RL-Tracker-v2.0.3`. A console window opens — **keep it running**.
 
 ### 3. Open Dashboard
 Your browser opens automatically at `http://localhost:3010`.
@@ -105,7 +105,7 @@ False positive — the file is unsigned. Click `Keep anyway` in your browser, or
 
 ## 🛠️ For Friends
 
-1. Download `RL-Tracker-v2.0.2`
+1. Download `RL-Tracker-v2.0.3`
 2. Double-click to run
 3. Enter YOUR Rocket League display name in Settings
 4. Play!
@@ -118,7 +118,7 @@ Each player needs their own `config.yaml` with their name. The tracker auto-crea
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v2.0.2** | Jun 28, 2026 | Bugfix: SPECTATOR skip invalid TeamNum, Avg Shot Power rounding, saves tracking |
+| **v2.0.3** | Jun 28, 2026 | Bugfix: SPECTATOR skip invalid TeamNum, Avg Shot Power rounding, saves tracking |
 | v9g | Jun 16, 2026 | Custom icon, all features stable |
 | v1-v8 | Jun 10-15, 2026 | Internal development (dedup, demolish tracking, deep stats, PyInstaller builds) |
 
