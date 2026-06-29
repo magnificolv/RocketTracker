@@ -356,9 +356,10 @@ class MatchState:
                         if candidate == self._team_confirm_candidate:
                             self._team_confirm_count += 1
                             if self._team_confirm_count >= 3:
-                                # Cross-check: is user's name on this team?
-                                up = self._find_user_player(players)
-                                if up:
+                                # Cross-check: use _fast_find (any team) to find user
+                                # by name, then verify they're on the SPECTATOR team
+                                up = self._fast_find(players, self.player_name)
+                                if up and up.get("TeamNum") == candidate:
                                     self.user_team_num = candidate
                                     team_name = "Blue" if candidate == 0 else "Orange"
                                     self._cross_check_fails = 0
@@ -375,8 +376,9 @@ class MatchState:
                                                     log(f"Duo detected: {fp.get('Name')}")
                                                     break
                                 else:
-                                    # SPECTATOR says team X but user's name not found there
-                                    log(f"SPECTATOR candidate {candidate} but user '{self.player_name}' NOT on that team — will retry")
+                                    # SPECTATOR says team X but user's name found on different team (or not found)
+                                    found_team = up.get("TeamNum") if up else "not found"
+                                    log(f"SPECTATOR candidate {candidate} but user '{self.player_name}' on team {found_team} — will retry")
                                     self._team_confirm_count = 0
                                     self._team_confirm_candidate = None
                         else:
