@@ -17,7 +17,7 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data-v2.db"
 
 # v1.1: Auto-update check against GitHub releases.
-APP_VERSION = "2.0.12"
+APP_VERSION = "2.0.13"
 GITHUB_REPO = "magnificolv/RocketTracker"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -306,44 +306,78 @@ def update_tracker():
     for f in tmp_root.glob("*.exe"):
         new_exe = f
         break
-    if not new_exe:
+
+    if new_exe:
+        # .exe-based update (Windows PyInstaller workflow)
+        # Preserve user data
+        for fname in ["data-v2.db", "config.yaml"]:
+            src = BASE_DIR / fname
+            if src.exists():
+                try:
+                    shutil.copy2(str(src), str(tmp_root / fname))
+                except Exception:
+                    pass
+
+        # Write updater.bat
+        bat_path = tmp_root / "updater.bat"
+        exe_name = new_exe.name
+        bat_path.write_text(
+            f'@echo off\r\n'
+            f'timeout /t 2 /nobreak >nul\r\n'
+            f'taskkill /f /im "RL-Tracker*" >nul 2>&1\r\n'
+            f'xcopy /Y /E "%~dp0*" "{BASE_DIR}\\\\" >nul\r\n'
+            f'start "" "{BASE_DIR}\\\\{exe_name}"\r\n'
+            f'rmdir /s /q "%~dp0" >nul 2>&1\r\n'
+            f'del "%~f0" >nul 2>&1\r\n'
+        )
+
+        try:
+            _os.startfile(str(bat_path))
+        except Exception:
+            import subprocess
+            subprocess.Popen(["cmd", "/c", str(bat_path)], shell=True)
+
+        def _do_exit():
+            import time as _t
+            _t.sleep(0.5)
+            _os._exit(0)
+        _th.Thread(target=_do_exit, daemon=True).start()
+        return jsonify({"ok": True, "message": f"Updating to v{new_version}...", "new_version": new_version})
+
+    # Source-based update (no .exe — Flask app, WSL/Unix)
+    # Look for app.py in the extracted tree
+    app_py = None
+    for f in tmp_root.glob("**/app.py"):
+        app_py = f
+        break
+
+    if not app_py:
         shutil.rmtree(str(tmp_root.parent), ignore_errors=True)
-        return jsonify({"ok": False, "error": "No .exe found in the downloaded archive"}), 500
+        return jsonify({"ok": False, "error": "No app.py or .exe found in the downloaded archive"}), 500
 
-    # Preserve user data
-    for fname in ["data-v2.db", "config.yaml"]:
-        src = BASE_DIR / fname
-        if src.exists():
-            try:
-                shutil.copy2(str(src), str(tmp_root / fname))
-            except Exception:
-                pass
+    extract_root = app_py.parent
 
-    # Write updater.bat
-    bat_path = tmp_root / "updater.bat"
-    exe_name = new_exe.name
-    bat_path.write_text(
-        f'@echo off\r\n'
-        f'timeout /t 2 /nobreak >nul\r\n'
-        f'taskkill /f /im "RL-Tracker*" >nul 2>&1\r\n'
-        f'xcopy /Y /E "%~dp0*" "{BASE_DIR}\\\\" >nul\r\n'
-        f'start "" "{BASE_DIR}\\\\{exe_name}"\r\n'
-        f'rmdir /s /q "%~dp0" >nul 2>&1\r\n'
-        f'del "%~f0" >nul 2>&1\r\n'
-    )
+    # Copy all extracted source files to BASE_DIR, overwriting existing
+    copied = 0
+    for src_file in extract_root.rglob("*"):
+        if src_file.is_dir():
+            continue
+        rel = src_file.relative_to(extract_root)
+        # Skip data files — they will be preserved
+        if rel.name in ("data-v2.db", "config.yaml"):
+            continue
+        dst = BASE_DIR / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(src_file), str(dst))
+        copied += 1
 
-    try:
-        _os.startfile(str(bat_path))
-    except Exception:
-        import subprocess
-        subprocess.Popen(["cmd", "/c", str(bat_path)], shell=True)
+    shutil.rmtree(str(tmp_root.parent), ignore_errors=True)
 
-    def _do_exit():
-        import time as _t
-        _t.sleep(0.5)
-        _os._exit(0)
-    _th.Thread(target=_do_exit, daemon=True).start()
-    return jsonify({"ok": True, "message": f"Updating to v{new_version}...", "new_version": new_version})
+    # Update in-memory version so next check doesn't re-trigger
+    import app as app_module
+    app_module.APP_VERSION = new_version
+
+    return jsonify({"ok": True, "message": f"Updated to v{new_version} ({copied} files). Refresh the page.", "new_version": new_version, "source_update": True})
 
 @app.route("/api/rl-config", methods=["GET"])
 def rl_config_status():
