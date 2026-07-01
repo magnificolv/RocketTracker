@@ -406,12 +406,15 @@ class MatchState:
             else:
                 self._cross_check_fails = 0
 
-        # Scores (fast)
+        # Scores — use max to prevent OT score regression.
+        # RL may report OT-period scores (e.g. 0-0) from Teams[].Score,
+        # which would overwrite regulation scores tracked via GoalScored.
+        # Using max() ensures scores only go up, never down.
         teams = game.get("Teams", ())
         for t in teams:
             tnum = t.get("TeamNum", -1)
             if tnum in (0, 1):
-                self.scores[tnum] = t.get("Score", 0)
+                self.scores[tnum] = max(self.scores[tnum], t.get("Score", 0))
 
         # Simple fields
         arena = game.get("Arena", "")
@@ -734,6 +737,9 @@ def run_listener(player: str, friends: list, stop_event):
                                 pos += end; continue
                             if steam in (0, 1):
                                 state.scores[steam] = state.scores[steam] + 1
+                            else:
+                                # v2.0.14: log unknown team for overtime/different format goals
+                                log(FieldResolver.raw_dump(d, f"GOAL UNKNOWN TEAM: scorer='{sname}' team={steam}"))
                             gs = FieldResolver.resolve(d, "goal_speed")
                             speed_kph = round(gs, 1) if gs else None  # GoalSpeed already in km/h
                             assister = FieldResolver.resolve_raw(d, "assister")

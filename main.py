@@ -35,7 +35,7 @@ from listener import run_listener, ensure_tastatsapi_ini
 
 def main():
     print("=" * 50)
-    print("  🚀 Rocket League Tracker v2.0.11")
+    print("  🚀 Rocket League Tracker v2.0.14")
     print(f"  📁 {BASE_DIR}")
     print("=" * 50)
 
