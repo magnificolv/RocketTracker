@@ -406,15 +406,10 @@ class MatchState:
             else:
                 self._cross_check_fails = 0
 
-        # Scores — use max to prevent OT score regression.
-        # RL may report OT-period scores (e.g. 0-0) from Teams[].Score,
-        # which would overwrite regulation scores tracked via GoalScored.
-        # Using max() ensures scores only go up, never down.
-        teams = game.get("Teams", ())
-        for t in teams:
-            tnum = t.get("TeamNum", -1)
-            if tnum in (0, 1):
-                self.scores[tnum] = max(self.scores[tnum], t.get("Score", 0))
+        # v2.0.15: DO NOT use game.Teams[].Score — it reports CUMULATIVE
+        # session scores (carries over between matches) and OT-period-only
+        # scores during overtime. GoalScored events are the authoritative
+        # score source and reset correctly per-match via reset().
 
         # Simple fields
         arena = game.get("Arena", "")
