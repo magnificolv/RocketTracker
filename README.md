@@ -1,4 +1,4 @@
-# 🚀 Rocket League Match Tracker v2.0.16
+# 🚀 Rocket League Match Tracker v3.0.0
 
 <p align="center">
   <a href="https://github.com/magnificolv/RocketTracker/releases/latest"><img src="https://img.shields.io/github/v/release/magnificolv/RocketTracker?style=flat-square&label=version&color=blue" alt="Version"></a>
@@ -64,7 +64,7 @@ Auto-tracks competitive Rocket League matches via the local Stats API:
 
 1. **Download** the [latest ZIP](https://github.com/magnificolv/RocketTracker/releases/latest)
 2. **Extract** to your Desktop — keep the `RL-Tracker\` folder together
-3. **Double-click** `RL-Tracker-v2.0.16.exe` — browser opens `http://localhost:3010`
+3. **Double-click** `RL-Tracker-v3.0.0.exe` — browser opens `http://localhost:3010`
 4. **Enter your name** in ⚙️ Settings → **Auto-Create** → restart Rocket League → play!
 
 > 💡 First time? Auto-Create sets up the Stats API config. Restart RL once so it takes effect.
@@ -104,7 +104,7 @@ Your `data-v2.db` and `config.yaml` are preserved.
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v2.0.16** | Aug 3, 2026 | Bugfixes: wall time, match dedup, session badges, duo late-join; visual upgrade; session deep stats |
+| **v3.0.0** | Aug 3, 2026 | Bugfixes: wall time, match dedup, session badges, duo late-join; visual upgrade; session deep stats |
 | v2.0.15 | Jul 1, 2026 | Scores from GoalScored only (no cumulative Teams[].Score) |
 | v2.0.14 | Jul 1, 2026 | OT score regression guard |
 | v2.0.13 | Jun 30, 2026 | Auto-update for source releases + session badge JOIN |

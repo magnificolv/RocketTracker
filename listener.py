@@ -191,17 +191,20 @@ def _write_summary(match_id: int):
     metrics.sort(key=lambda x: x[2], reverse=True)
     hi_icon, hi_text, hi_value = metrics[0]
 
+    playlist = match["playlist"] if "playlist" in match.keys() else "Unknown"
+    friend_name = match["friend_name"] if "friend_name" in match.keys() else None
     db.execute(
         """INSERT OR REPLACE INTO matches_summary
            (match_id, session_id, played_at, user_score, opponent_score,
             result, mode, arena, highlight_icon, highlight_text, highlight_value,
-            goals, shots, saves, demos_given, demos_taken)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            goals, shots, saves, demos_given, demos_taken, playlist, friend_name)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (match_id, match["session_id"], match["played_at"],
          goals, match["opponent_score"],
          match["result"], match["mode"], match["arena"],
          hi_icon, hi_text, hi_value,
-         goals, shots, saves, demos, match["demos_taken"] or 0)
+         goals, shots, saves, demos, match["demos_taken"] or 0,
+         playlist, friend_name)
     )
     db.commit()
     db.close()
@@ -227,12 +230,14 @@ def update_status(state: str, msg: str = "", player="", friends=None, poll_inter
 
 class MatchState:
     __slots__ = ('player_name', 'friend_names', 'match_guid', 'user_team_num',
-                 'scores', 'mode', 'arena', 'goals', 'ball_hits',
+                 'scores', 'mode', 'arena', 'playlist', 'friend_name', 'goals', 'ball_hits',
                  'touches', 'car_touches', 'shots', 'saves', 'assists',
                  'demos_given', 'demos_taken', 'is_overtime', 'time_remaining',
                  'tick_count', 'active_tick_count', 'boost_sum', 'boost_count',
                  'boosting_ticks', 'supersonic_ticks',
                  'on_ground_ticks', 'in_air_ticks', 'on_wall_ticks',
+                 'teammate_name', 'teammate_shots', 'teammate_saves',
+                 'teammate_assists', 'teammate_touches', 'teammate_demos',
                  '_match_recorded', '_player_cache', '_friend_cache',
                  '_prev_demos', '_was_demolished',
                  '_last_update_time', '_poll_interval', '_connected',
@@ -259,6 +264,14 @@ class MatchState:
         self.scores = [0, 0]
         self.mode = "solo"
         self.arena = None
+        self.playlist = "Unknown"
+        self.friend_name = None
+        self.teammate_name = None
+        self.teammate_shots = 0
+        self.teammate_saves = 0
+        self.teammate_assists = 0
+        self.teammate_touches = 0
+        self.teammate_demos = 0
         self.goals = []
         self.ball_hits = []
         self.touches = 0; self.car_touches = 0; self.shots = 0; self.saves = 0
@@ -373,6 +386,7 @@ class MatchState:
                                                 fpname = fp.get("Name", "").lower().strip()
                                                 if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
                                                     self.mode = "duo"
+                                                    self.friend_name = fp.get("Name")
                                                     log(f"Duo detected: {fp.get('Name')}")
                                                     break
                                 else:
@@ -415,6 +429,25 @@ class MatchState:
         arena = game.get("Arena", "")
         if arena and not self.arena:
             self.arena = arena
+        # Playlist: prefer RL fields, else player-count fallback
+        pl_found = False
+        for key in ("Playlist", "PlaylistName", "MatchType", "GameMode", "Mode"):
+            val = game.get(key)
+            if val not in (None, "", 0):
+                self.playlist = str(val)
+                pl_found = True
+                break
+        if not pl_found:
+            npl = len(players) if players else 0
+            if npl:
+                if npl <= 2:
+                    self.playlist = "1v1"
+                elif npl <= 4:
+                    self.playlist = "2v2"
+                elif npl <= 6:
+                    self.playlist = "3v3"
+                else:
+                    self.playlist = f"{npl}p"
         if game.get("bOvertime"):
             self.is_overtime = True
         if "TimeSeconds" in game:
@@ -474,8 +507,33 @@ class MatchState:
                             continue
                         if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
                             self.mode = "duo"
+                            self.friend_name = fp.get("Name")
                             log(f"Duo detected (late join): {fp.get('Name')}")
                             break
+
+                # Teammate snapshot (best-effort)
+                if players and self.user_team_num is not None:
+                    pname = (self.player_name or "").lower().strip()
+                    best = None
+                    for fp in players:
+                        if fp.get("TeamNum") != self.user_team_num:
+                            continue
+                        fpname = (fp.get("Name") or "").lower().strip()
+                        if not fpname:
+                            continue
+                        if pname and (pname == fpname or pname in fpname or fpname in pname):
+                            continue
+                        best = fp
+                        break
+                    if best:
+                        self.teammate_name = best.get("Name") or self.teammate_name
+                        self.teammate_shots = best.get("Shots", 0) or 0
+                        self.teammate_saves = best.get("Saves", 0) or 0
+                        self.teammate_assists = best.get("Assists", 0) or 0
+                        self.teammate_touches = best.get("Touches", 0) or 0
+                        self.teammate_demos = best.get("Demos", 0) or 0
+                        if self.mode == "duo" and not self.friend_name:
+                            self.friend_name = self.teammate_name
 
         # Match end detection (only check if player found)
         if self.user_team_num is not None and game.get("bHasWinner") and not self._match_recorded:
@@ -527,9 +585,17 @@ class MatchState:
             cur = db.execute("INSERT INTO sessions (started_at, mode) VALUES (?, ?)", (now, self.mode))
             session_id = cur.lastrowid
 
+        if self.mode == "duo" and self.friend_name:
+            try:
+                db.execute(
+                    "UPDATE sessions SET mode='duo', friend_name=COALESCE(friend_name, ?) WHERE id=? AND status='active'",
+                    (self.friend_name, session_id),
+                )
+            except Exception:
+                pass
         cur = db.execute(
-            "INSERT INTO matches (session_id, played_at, user_score, opponent_score, result, mode) VALUES (?,?,?,?,?,?)",
-            (session_id, now, self.user_score, self.opponent_score, result, self.mode))
+            "INSERT INTO matches (session_id, played_at, user_score, opponent_score, result, mode, playlist, friend_name) VALUES (?,?,?,?,?,?,?,?)",
+            (session_id, now, self.user_score, self.opponent_score, result, self.mode, self.playlist or "Unknown", self.friend_name))
         match_id = cur.lastrowid
         if not match_id:
             db.close()
@@ -546,8 +612,9 @@ class MatchState:
             """INSERT INTO match_details
                (match_id, arena, overtime, touches, car_touches, shots, saves, assists,
                 demos_given, demos_taken, boost_avg, boost_time_pct, supersonic_time_pct,
-                ground_time_pct, air_time_pct, wall_time_pct, fastest_goal_kph, avg_shot_power, time_remaining_sec)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                ground_time_pct, air_time_pct, wall_time_pct, fastest_goal_kph, avg_shot_power, time_remaining_sec,
+                playlist, teammate_name, teammate_shots, teammate_saves, teammate_assists, teammate_touches, teammate_demos)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (match_id, self.arena, int(self.is_overtime), self.touches, self.car_touches,
              self.shots, self.saves, self.assists, self.demos_given, self.demos_taken,
              round(self.boost_sum / max(self.boost_count, 1), 1),
@@ -556,7 +623,10 @@ class MatchState:
              round(self.on_ground_ticks / ticks * 100, 1),
              round(self.in_air_ticks / ticks * 100, 1),
              round(self.on_wall_ticks / ticks * 100, 1),
-             fastest_goal, avg_power, self.time_remaining))
+             fastest_goal, avg_power, self.time_remaining,
+             self.playlist or "Unknown", self.teammate_name,
+             self.teammate_shots, self.teammate_saves, self.teammate_assists,
+             self.teammate_touches, self.teammate_demos))
 
         for g in self.goals:
             db.execute("INSERT INTO goals (match_id, scored_at, scorer, assister, team_num, speed_kph, time_remaining_sec) VALUES (?,?,?,?,?,?,?)",
@@ -570,7 +640,7 @@ class MatchState:
         db.close()
         _write_summary(match_id)
         flush_log()
-        log(f"RECORDED: {'WIN' if result == 'win' else 'LOSS'}! {self.user_score}-{self.opponent_score} [{self.mode}]")
+        log(f"RECORDED: {'WIN' if result == 'win' else 'LOSS'}! {self.user_score}-{self.opponent_score} [{self.mode}/{self.playlist}]")
         # Active Coach (TRIZ #25): self-analyse immediately after recording.
         # Runs after DB close so a coach error can never corrupt the match row.
         # Insights are informational only - failures are logged and swallowed.

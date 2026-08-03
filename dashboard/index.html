@@ -2,608 +2,478 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rocket League Match Tracker</title>
+<title>RL Tracker 3.0 · Starlight</title>
 <style>
-:root{--bg-primary:#09090f;--bg-secondary:#131320;--bg-card:#1a1a2e;--bg-card-hover:#1f1f38;--bg-input:#0f0f1a;--text-primary:#e8ecf1;--text-secondary:#94a3b8;--text-muted:#5c6a7d;--border:#252538;--border-active:#818cf8;--blue:#4FC3F7;--blue-glow:rgba(79,195,247,0.15);--orange:#FF6B35;--orange-glow:rgba(255,107,53,0.15);--green:#4ade80;--green-glow:rgba(74,222,128,0.12);--red:#f87171;--red-glow:rgba(248,113,113,0.12);--radius:14px;--radius-sm:10px;--shadow:0 8px 32px rgba(0,0,0,0.4);--transition:0.25s cubic-bezier(0.4,0,0.2,1);--font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+:root{
+  --bg:#050510;--bg2:#0a0a18;--card:rgba(18,18,42,.88);--card2:rgba(12,12,28,.92);
+  --border:rgba(99,102,241,.22);--border2:#2a2a48;
+  --text:#eef1ff;--muted:#9aa3c7;--soft:#b4bfd6;
+  --cyan:#22d3ee;--violet:#a78bfa;--orchid:#e879f9;--pink:#f472b6;
+  --blue:#38bdf8;--orange:#fb923c;--green:#4ade80;--red:#f87171;
+  --r:18px;--rsm:12px;--shadow:0 12px 40px rgba(0,0,0,.45);
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --grad:linear-gradient(115deg,#22d3ee,#a78bfa,#e879f9,#f472b6);
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--font);background:var(--bg-primary);background-image:url('fons.jpg'),radial-gradient(ellipse at 60% 0%,var(--blue-glow)0%,transparent 50%),radial-gradient(ellipse at 40% 100%,var(--orange-glow)0%,transparent 50%);background-size:cover;background-position:center;background-attachment:fixed;background-blend-mode:overlay;color:var(--text-primary);min-height:100vh;padding:0 20px 40px}
-.listener-bar{text-align:center;padding:6px 16px;font-size:.75rem;font-weight:600;border-bottom:1px solid var(--border);background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;gap:8px}
-.listener-bar .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.dot-live{background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse-dot 2s ease-in-out infinite}
-.dot-connecting{background:#fbbf24;box-shadow:0 0 6px #fbbf24;animation:pulse-dot 1s ease-in-out infinite}
-.dot-off{background:var(--text-muted)}
-@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
-.settings-toggle{position:fixed;bottom:24px;right:24px;width:44px;height:44px;border-radius:50%;background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);font-size:1.2rem;cursor:pointer;z-index:50;transition:all var(--transition);display:flex;align-items:center;justify-content:center}
-.settings-toggle:hover{color:var(--text-primary);border-color:var(--text-muted);transform:scale(1.05)}
-.exit-btn{position:fixed;bottom:24px;right:80px;width:44px;height:44px;border-radius:50%;background:var(--bg-card);border:1px solid rgba(248,113,113,0.3);color:var(--red);font-size:1.2rem;cursor:pointer;z-index:50;transition:all var(--transition);display:flex;align-items:center;justify-content:center}
-.exit-btn:hover{background:var(--red-glow);border-color:var(--red);transform:scale(1.1);box-shadow:0 0 12px rgba(248,113,113,0.3)}
-.header{text-align:center;padding:40px 0 20px}
-.header-logo{width:48px;height:48px;vertical-align:middle;margin-right:10px;margin-bottom:6px;filter:drop-shadow(0 0 8px rgba(255,107,53,0.3))}
-.header h1{font-size:2rem;font-weight:800;background:linear-gradient(135deg,var(--blue),var(--orange));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px;display:inline-block;vertical-align:middle}
-.header .subtitle{color:var(--text-muted);font-size:.88rem}
-.header .version{color:var(--text-muted);font-size:.68rem;margin-top:4px;opacity:.6}
-.nav{display:flex;justify-content:center;gap:4px;margin:0 auto 32px;max-width:500px;background:var(--bg-card);border:1px solid var(--border);border-radius:50px;padding:4px}
-.nav-btn{flex:1;padding:10px 18px;border-radius:50px;border:none;cursor:pointer;font-family:var(--font);font-size:.88rem;font-weight:600;background:transparent;color:var(--text-muted);transition:all var(--transition)}
-.nav-btn:hover{color:var(--text-primary)}
-.nav-btn.active{background:linear-gradient(135deg,#6366f1,#818cf8);color:white;box-shadow:0 2px 12px rgba(99,102,241,0.25)}
-.container{max-width:700px;margin:0 auto}.panel{display:none}.panel.active{display:block}
-.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin-bottom:16px;animation:cardIn .35s ease backwards}
-@keyframes cardIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+body{
+  font-family:var(--font);color:var(--text);min-height:100vh;
+  background:var(--bg);
+  background-image:
+    linear-gradient(180deg,rgba(5,5,16,.55),rgba(5,5,16,.82)),
+    url('fons.jpg'),
+    radial-gradient(ellipse 70% 50% at 50% -10%,rgba(99,102,241,.28),transparent 60%),
+    radial-gradient(ellipse 50% 40% at 80% 100%,rgba(232,121,249,.12),transparent 55%);
+  background-size:cover,cover,auto,auto;background-attachment:fixed;background-position:center;
+  padding:0 18px 56px;
+}
+.listener-bar{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 14px;font-size:.75rem;font-weight:700;letter-spacing:.03em;border-bottom:1px solid var(--border);background:rgba(10,10,24,.85);backdrop-filter:blur(10px)}
+.dot{width:8px;height:8px;border-radius:50%}
+.dot-live{background:var(--green);box-shadow:0 0 10px var(--green);animation:pulse 2s infinite}
+.dot-connecting{background:#fbbf24;box-shadow:0 0 8px #fbbf24;animation:pulse 1s infinite}
+.dot-off{background:var(--muted)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.header{text-align:center;padding:42px 0 18px;position:relative}
+.header-logo{width:64px;height:64px;border-radius:18px;vertical-align:middle;margin-right:12px;box-shadow:0 0 28px rgba(167,139,250,.35),0 0 48px rgba(34,211,238,.15)}
+.header h1{display:inline-block;vertical-align:middle;font-size:2.2rem;font-weight:800;letter-spacing:-.03em}
+.header h1 .accent{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 16px rgba(232,121,249,.35))}
+.header .subtitle{color:var(--soft);margin-top:8px;font-size:.92rem;text-shadow:0 0 18px rgba(129,140,248,.2)}
+.header .version{color:var(--muted);font-size:.7rem;margin-top:6px;opacity:.75}
+.header::after{content:'';display:block;width:140px;height:3px;margin:16px auto 0;border-radius:3px;background:var(--grad);opacity:.75}
+.nav{display:flex;justify-content:center;gap:6px;max-width:620px;margin:0 auto 28px;padding:5px;border-radius:999px;background:rgba(18,18,42,.75);border:1px solid var(--border);backdrop-filter:blur(14px);box-shadow:var(--shadow)}
+.nav-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 10px;border:none;border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:.84rem;font-weight:700;cursor:pointer;transition:.18s}
+.nav-btn img{width:18px;height:18px;opacity:.7}
+.nav-btn:hover{color:var(--text)}
+.nav-btn.active{background:linear-gradient(135deg,#6366f1,#a78bfa);color:#fff;box-shadow:0 4px 18px rgba(99,102,241,.35)}
+.nav-btn.active img{opacity:1;filter:brightness(1.3)}
+.container{max-width:760px;margin:0 auto}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px 22px;margin-bottom:14px;backdrop-filter:blur(12px);box-shadow:var(--shadow);animation:in .28s ease}
+@keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .card.win-card{border-left:4px solid var(--green)}.card.loss-card{border-left:4px solid var(--red)}
-.session-card{cursor:pointer}.session-card:hover{background:var(--bg-card-hover);transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,0.3)}
-.btn{padding:8px 18px;border-radius:50px;border:none;cursor:pointer;font-family:var(--font);font-size:.82rem;font-weight:600;transition:all var(--transition)}
-.btn-primary{background:linear-gradient(135deg,#6366f1,#818cf8);color:white}.btn-primary:hover{box-shadow:0 4px 16px rgba(99,102,241,0.3);transform:translateY(-1px)}
-.btn-danger{background:var(--red-glow);color:var(--red);border:1px solid rgba(248,113,113,0.3)}
-.btn-ghost{background:transparent;color:var(--text-muted)}.btn-ghost:hover{color:var(--text-primary)}
-.input{width:100%;padding:10px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font);font-size:.88rem;outline:none}.input:focus{border-color:var(--border-active)}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:100}
-.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;max-width:460px;width:90%}
-.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text-muted);gap:10px}
-.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--border-active);border-radius:50%;animation:spin .6s linear infinite}
+.session-card{cursor:pointer;transition:.18s}.session-card:hover{transform:translateY(-2px);border-color:rgba(167,139,250,.45)}
+.btn{padding:9px 16px;border-radius:999px;border:1px solid transparent;cursor:pointer;font:inherit;font-size:.8rem;font-weight:700;transition:.18s}
+.btn-primary{background:linear-gradient(135deg,#6366f1,#a78bfa);color:#fff}
+.btn-primary:hover{box-shadow:0 6px 20px rgba(99,102,241,.35);transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:var(--muted);border-color:var(--border2)}
+.btn-ghost:hover{color:var(--text);border-color:var(--violet)}
+.btn-danger{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3)}
+.btn-share{background:linear-gradient(135deg,#22d3ee,#a78bfa);color:#041018}
+.input{width:100%;padding:11px 14px;background:rgba(8,8,18,.9);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font:inherit;outline:none}
+.input:focus{border-color:var(--violet)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal{background:rgba(16,16,36,.97);border:1px solid rgba(167,139,250,.28);border-radius:var(--r);padding:26px;max-width:480px;width:92%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.55)}
+.settings-toggle,.exit-btn{position:fixed;bottom:22px;width:46px;height:46px;border-radius:50%;border:1px solid var(--border);background:var(--card);cursor:pointer;z-index:50;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:var(--muted);backdrop-filter:blur(10px)}
+.settings-toggle{right:22px}.exit-btn{right:78px;color:var(--red);border-color:rgba(248,113,113,.3)}
+.settings-toggle:hover,.exit-btn:hover{transform:scale(1.07);color:var(--text)}
+.loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--muted)}
+.spinner{width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--violet);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.match-row{cursor:pointer;flex-wrap:wrap}.match-row:hover{background:rgba(255,255,255,0.03)}.match-row .match-detail-popup{flex-basis:100%;order:99}.match-detail-popup{display:none;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;margin-top:8px;width:100%;min-width:100%}.match-detail-popup.show{display:block;animation:cardIn .25s ease}
-.empty-state{text-align:center;padding:40px 20px;color:var(--text-muted)}
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px}
-.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center}
-.stat-card h4{color:var(--text-muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
-.stat-card .big-number{font-size:2.2rem;font-weight:800;background:linear-gradient(135deg,var(--blue),#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.winrate-bar{margin-top:10px;height:6px;border-radius:3px;background:var(--red-glow);overflow:hidden}
-.winrate-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--green),#22c55e);transition:width .6s}
-.recent-form{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}
-.form-dot{width:32px;height:32px;border-radius:50%;font-size:.65rem;font-weight:800;display:flex;align-items:center;justify-content:center}
-.form-dot.win{background:var(--green-glow);color:var(--green);border:1px solid rgba(74,222,128,0.3)}
-.form-dot.loss{background:var(--red-glow);color:var(--red);border:1px solid rgba(248,113,113,0.3)}
-.form-dot.placeholder{background:rgba(255,255,255,0.03);border:1px dashed var(--border);color:transparent}
-.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--border);border-radius:50px;padding:10px 24px;font-size:.85rem;font-weight:600;z-index:200;animation:toastIn .3s ease;box-shadow:var(--shadow)}
-
-.streak-badge{display:inline-block;padding:3px 10px;border-radius:50px;font-size:.72rem;font-weight:700;margin-top:6px}.streak-badge.hot{background:linear-gradient(135deg,#f97316,#ef4444);color:white;animation:pulse-dot 2s ease-in-out infinite}@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-.deep-section{margin-top:24px}
-.deep-section h3{color:var(--text-secondary);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
-.deep-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
-.metric-card{background:var(--bg-input);border-radius:var(--radius-sm);padding:14px;text-align:center}
-.metric-card .metric-value{font-size:1.3rem;font-weight:700}
-.metric-card .metric-label{font-size:.7rem;color:var(--text-muted);margin-top:2px}
-.metric-card.orange .metric-value{color:var(--orange)}
-.metric-card.blue .metric-value{color:var(--blue)}
-.metric-card.green .metric-value{color:var(--green)}
-.metric-card.red .metric-value{color:var(--red)}
-.metric-bar{height:4px;border-radius:2px;background:var(--border);margin-top:6px;overflow:hidden}
+.empty-state{text-align:center;padding:36px 16px;color:var(--muted)}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.stat-card{background:var(--card2);border:1px solid var(--border);border-radius:var(--r);padding:18px;text-align:center}
+.stat-card h4{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+.big-number{font-size:2.1rem;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.winrate-bar{height:6px;border-radius:3px;background:rgba(248,113,113,.15);overflow:hidden;margin-top:10px}
+.winrate-fill{height:100%;background:linear-gradient(90deg,var(--green),#22c55e)}
+.recent-form{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.form-dot{width:28px;height:28px;border-radius:50%;font-size:.62rem;font-weight:800;display:flex;align-items:center;justify-content:center}
+.form-dot.win{background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.35)}
+.form-dot.loss{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3)}
+.form-dot.placeholder{border:1px dashed var(--border2);color:transparent}
+.filters{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:0 0 16px}
+.chip{padding:7px 14px;border-radius:999px;border:1px solid var(--border2);background:rgba(12,12,28,.7);color:var(--muted);font-size:.75rem;font-weight:700;cursor:pointer;transition:.15s}
+.chip:hover{color:var(--text);border-color:var(--violet)}
+.chip.active{background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(167,139,250,.25));color:#fff;border-color:rgba(167,139,250,.55);box-shadow:0 0 16px rgba(167,139,250,.2)}
+.refresh-btn{display:inline-flex;align-items:center;gap:6px;margin:0 auto 14px;padding:8px 16px;border-radius:999px;border:1px solid rgba(129,140,248,.35);background:rgba(99,102,241,.12);color:#c7d2fe;font-weight:700;font-size:.8rem;cursor:pointer}
+.deep-section{margin-top:18px}
+.deep-section h3{color:var(--soft);font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
+.deep-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.metric-card{background:rgba(8,8,18,.85);border:1px solid var(--border2);border-radius:var(--rsm);padding:14px;text-align:center}
+.metric-value{font-size:1.25rem;font-weight:800}.metric-label{font-size:.68rem;color:var(--muted);margin-top:3px}
+.metric-card.orange .metric-value{color:var(--orange)}.metric-card.blue .metric-value{color:var(--blue)}
+.metric-card.green .metric-value{color:var(--green)}.metric-card.red .metric-value{color:var(--red)}
+.metric-bar{height:4px;border-radius:2px;background:var(--border2);margin-top:6px;overflow:hidden}
 .metric-bar-fill{height:100%;border-radius:2px}
-.session-badge{font-size:.7rem;padding:2px 8px;border-radius:50px;background:var(--bg-input)}
-.session-badge.badge-active{color:var(--green)}.session-badge.badge-completed{color:var(--text-muted)}
-
-/* ====== MATRYOSHKA UI — 3-LAYER DEPTH NAVIGATION ====== */
-.matryoshka-section{margin-bottom:32px}
-.matryoshka-l0{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:0 0 20px}
-.hero-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px 20px;text-align:center;cursor:pointer;transition:all 0.2s ease;position:relative;overflow:hidden}
-.hero-card:hover{transform:translateY(-3px);background:var(--bg-card-hover);box-shadow:0 8px 24px rgba(0,0,0,0.3)}
-.hero-card.active{border-color:var(--border-active);box-shadow:0 0 20px rgba(129,140,248,0.25)}
-.hero-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--blue),var(--orange));opacity:0;transition:opacity 0.2s}
-.hero-card.active::before{opacity:1}
-.hero-icon{font-size:2rem;margin-bottom:8px;display:block}
-.hero-title{font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
-.hero-value{font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,var(--blue),#818cf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.hero-subtitle{font-size:.82rem;color:var(--text-secondary);margin-top:4px;font-weight:600}
-.matryoshka-l1{max-height:0;overflow:hidden;transition:max-height 0.4s ease}
-.matryoshka-l1.open{max-height:600px}
-.matryoshka-l1-inner{padding:0 0 16px}
-.ring-category{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px 20px;margin-bottom:10px;cursor:pointer;transition:all 0.2s}
-.ring-category:hover{background:var(--bg-card-hover);transform:translateX(4px)}
-.ring-category.active{border-color:var(--border-active)}
-.ring-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.ring-title{font-size:.88rem;font-weight:600}
-.ring-score{font-size:.82rem;font-weight:700;color:var(--text-secondary)}
-.ring-bar{height:10px;border-radius:5px;background:var(--border);overflow:hidden;position:relative}
-.ring-bar-fill{height:100%;border-radius:5px;transition:width 0.6s ease;background:linear-gradient(90deg,#4a9eff 0%,#ffffff 50%,#ff7b35 75%,#ff4444 100%)}
-.matryoshka-l2{max-height:0;overflow:hidden;transition:max-height 0.4s ease}
-.matryoshka-l2.open{max-height:1000px}
-.matryoshka-l2-inner{padding:16px 0}
-.l2-section{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;margin-bottom:16px}
-.l2-section h3{color:var(--text-secondary);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-.l2-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
-.l2-metric{background:var(--bg-input);border-radius:var(--radius-sm);padding:14px 12px;text-align:center}
-.l2-metric .metric-value{font-size:1.3rem;font-weight:700}
-.l2-metric .metric-label{font-size:.7rem;color:var(--text-muted);margin-top:3px}
-.l2-metric.orange .metric-value{color:var(--orange)}
-.l2-metric.blue .metric-value{color:var(--blue)}
-.l2-metric.green .metric-value{color:var(--green)}
-.l2-metric.red .metric-value{color:var(--red)}
-.l2-metric-bar{height:4px;border-radius:2px;background:var(--border);margin-top:6px;overflow:hidden}
-.l2-metric-bar-fill{height:100%;border-radius:2px}
-.matryoshka-hint{text-align:center;font-size:.7rem;color:var(--text-muted);padding:8px 0;opacity:.6}
-
-.legend{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;font-size:.7rem;color:var(--text-muted);padding:8px 0;margin-top:4px;border-top:1px solid var(--border)}.legend span{display:flex;align-items:center;gap:4px}
-/* v2.0.16 visual polish */
-.header{position:relative;padding:48px 0 24px}
-.header::after{content:'';display:block;width:120px;height:3px;margin:14px auto 0;border-radius:3px;background:linear-gradient(90deg,transparent,var(--blue),var(--orange),transparent);opacity:.7}
-.header h1{font-size:2.15rem;letter-spacing:-0.03em;filter:drop-shadow(0 0 18px rgba(79,195,247,0.18))}
-.header-logo{width:56px;height:56px;border-radius:14px;box-shadow:0 0 24px rgba(79,195,247,0.25),0 0 40px rgba(255,107,53,0.12)}
-.header .subtitle{color:#b4bfd6;text-shadow:0 0 12px rgba(129,140,248,0.15)}
-.nav{max-width:560px;background:rgba(26,26,46,0.85);backdrop-filter:blur(12px);border:1px solid rgba(129,140,248,0.18);box-shadow:0 8px 32px rgba(0,0,0,0.35)}
-.card{background:rgba(26,26,46,0.92);backdrop-filter:blur(10px);box-shadow:0 4px 24px rgba(0,0,0,0.28);transition:transform .2s ease, box-shadow .2s ease, border-color .2s}
-.card:hover{border-color:rgba(129,140,248,0.28)}
-.stat-card,.hero-card,.metric-card,.l2-metric{background:rgba(15,15,26,0.85);border:1px solid rgba(37,37,56,0.9)}
-.stat-card{box-shadow:inset 0 1px 0 rgba(255,255,255,0.03)}
-.listener-bar{background:rgba(19,19,32,0.92);backdrop-filter:blur(8px);letter-spacing:.02em}
-.modal{max-height:90vh;overflow-y:auto;background:rgba(26,26,46,0.97);backdrop-filter:blur(16px);border:1px solid rgba(129,140,248,0.22);box-shadow:0 24px 64px rgba(0,0,0,0.55)}
-.modal-overlay{backdrop-filter:blur(4px)}
-.refresh-btn{display:inline-flex;align-items:center;gap:6px;margin:0 auto 14px;padding:8px 16px;border-radius:50px;border:1px solid rgba(129,140,248,0.35);background:rgba(99,102,241,0.12);color:#c7d2fe;font-weight:600;font-size:.8rem;cursor:pointer;transition:all .2s}
-.refresh-btn:hover{background:rgba(99,102,241,0.22);transform:translateY(-1px);box-shadow:0 4px 16px rgba(99,102,241,0.2)}
-.session-deep{margin-top:12px;padding-top:8px;border-top:1px solid var(--border)}
-.glass-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);font-size:.68rem;color:var(--text-secondary)}
+.session-badge{font-size:.68rem;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--border2);color:var(--soft)}
+.badge-active{color:var(--green)}.badge-completed{color:var(--muted)}
+.match-row{cursor:pointer}.match-row:hover{background:rgba(255,255,255,.03)}
+.match-detail-popup{display:none;background:rgba(8,8,18,.9);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-top:8px;width:100%}
+.match-detail-popup.show{display:block;animation:in .2s ease}
+.toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:999px;padding:10px 22px;font-size:.84rem;font-weight:700;z-index:200;box-shadow:var(--shadow)}
+.grade-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;font-weight:800;font-size:.9rem;color:#041018}
+.tip{display:flex;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(8,8,18,.75);border-left:3px solid var(--violet);margin-bottom:8px;font-size:.86rem}
+.tip.warn{border-left-color:var(--orange)}.tip.good{border-left-color:var(--green)}.tip.info{border-left-color:var(--blue)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:.7rem;color:var(--muted);padding:8px 0;margin-top:6px;border-top:1px solid var(--border)}
+.streak-badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.72rem;font-weight:700;margin-top:6px}
+.streak-badge.hot{background:linear-gradient(135deg,#f97316,#ef4444);color:#fff}
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:12px 0}
+.cat{background:rgba(8,8,18,.8);border:1px solid var(--border2);border-radius:12px;padding:12px}
+.cat .s{font-size:1.4rem;font-weight:800}.cat .n{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.trend-up{color:var(--green)}.trend-down{color:var(--red)}.trend-flat{color:var(--muted)}
+@media(max-width:560px){
+  .nav{flex-wrap:wrap;border-radius:18px}.nav-btn{flex:1 1 40%;border-radius:14px}
+  .header h1{font-size:1.6rem}
+}
 </style>
 </head>
 <body>
-
 <div class="listener-bar"><div class="dot dot-off" id="listener-dot"></div><span id="listener-msg">Auto-tracker: not running</span></div>
-
-<div class="header"><img src="logo.png" class="header-logo" alt="RL Tracker"><h1>Rocket League Match Tracker</h1><p class="subtitle">Track your competitive grind</p><p class="version">RL Tracker 2.0.16 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:600;font-size:.72rem">● Update available</span></p></div>
-
-<nav class="nav"><button class="nav-btn active" data-tab="active-session">🎮 Active Session</button><button class="nav-btn" data-tab="history">📋 History</button><button class="nav-btn" data-tab="stats">📊 Stats</button><button class="nav-btn" data-tab="coach">🏆 Coach</button></nav>
-
+<div class="header">
+  <img src="logo.png" class="header-logo" alt="RL Tracker">
+  <h1>Rocket League <span class="accent">Tracker</span></h1>
+  <p class="subtitle">Starlight edition · track the grind, share the session</p>
+  <p class="version">RL Tracker 3.0.0 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
+</div>
+<nav class="nav">
+  <button class="nav-btn active" data-tab="active-session"><img src="icons/session.png" alt="">Session</button>
+  <button class="nav-btn" data-tab="history"><img src="icons/history.png" alt="">History</button>
+  <button class="nav-btn" data-tab="stats"><img src="icons/stats.png" alt="">Stats</button>
+  <button class="nav-btn" data-tab="coach"><img src="icons/coach.png" alt="">Coach</button>
+</nav>
 <div class="container">
-<div class="matryoshka-section" id="matryoshka-root" style="display:none">
-<div class="matryoshka-l0" id="matryoshka-l0"></div>
-<p class="matryoshka-hint" id="matryoshka-hint">Click any card to expand stats</p>
-<div class="matryoshka-l1" id="matryoshka-l1"><div class="matryoshka-l1-inner" id="matryoshka-l1-content"></div></div>
-<div class="matryoshka-l2" id="matryoshka-l2"><div class="matryoshka-l2-inner" id="matryoshka-l2-content"></div></div>
+  <div class="panel active" id="panel-active-session"><div id="active-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div class="panel" id="panel-history"><div id="history-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div class="panel" id="panel-stats"><div id="stats-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div class="panel" id="panel-coach"><div id="coach-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
 </div>
-<div class="panel active" id="panel-active-session"><div id="active-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
-<div class="panel" id="panel-history"><div id="history-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
-<div class="panel" id="panel-stats"><div id="stats-content"><div class="loading"><div class="spinner"></div>Loading stats...</div></div></div>
-<div class="panel" id="panel-coach"><div id="coach-content"><div class="loading"><div class="spinner"></div>Loading coach...</div></div></div>
-</div>
-
 <div id="toast-container"></div>
 <button class="settings-toggle" onclick="toggleSettings()" title="Settings">⚙️</button>
-<button class="exit-btn" onclick="exitTracker()" title="Exit Tracker">⏻</button>
-
+<button class="exit-btn" onclick="exitTracker()" title="Exit">⏻</button>
 <div class="modal-overlay" id="settings-modal" style="display:none"><div class="modal">
-<h3 style="margin-bottom:16px">⚙️ Auto-Tracker Settings</h3>
-<label style="display:block;color:var(--text-secondary);font-size:.82rem;margin-bottom:4px">Your Rocket League Name</label>
-<input type="text" class="input" id="cfg-player-name" placeholder="e.g. Magnifico" style="margin-bottom:14px">
-<label style="display:block;color:var(--text-secondary);font-size:.82rem;margin-bottom:4px">Friend Names (one per line)</label>
-<textarea class="input" id="cfg-friends" rows="3" style="margin-bottom:14px;resize:vertical"></textarea>
-<p style="color:var(--text-muted);font-size:.72rem;margin-bottom:14px">Tracker auto-detects matches when RL is running.<br>Make sure <b>TAStatsAPI.ini</b> is set up.</p>
-<div style="background:var(--bg-input);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:.82rem;font-weight:600">🔧 RL Stats API Config</span><span id="rl-config-badge" style="font-size:.7rem;padding:2px 8px;border-radius:50px;background:var(--bg-card)">Checking...</span></div>
-<p id="rl-config-msg" style="font-size:.72rem;color:var(--text-secondary);margin-bottom:8px"></p>
-<div style="display:flex;gap:6px"><button class="btn btn-ghost" onclick="checkRlConfig()" style="font-size:.72rem">🔄 Check</button><button class="btn btn-primary" onclick="createRlConfig()" style="font-size:.72rem">📝 Auto-Create</button></div></div>
-<div style="background:var(--bg-input);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:.82rem;font-weight:600">🔄 Auto-Update</span><span id="update-badge-modal" style="font-size:.7rem;padding:2px 8px;border-radius:50px;background:var(--bg-card)">Not checked</span></div>
-<p style="font-size:.72rem;color:var(--text-secondary);margin-bottom:8px">Checks GitHub for newer releases of RocketTracker.</p>
-<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="checkForUpdates()" style="font-size:.72rem;border-color:var(--border-active);color:var(--border-active)">🔄 Check for Updates</button></div>
-<div id="update-results" style="display:none;margin-top:12px;padding:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.78rem"></div>
-</div>
-<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" onclick="toggleSettings()">Cancel</button><button class="btn btn-primary" onclick="saveSettings()">💾 Save</button></div></div></div>
-
+  <h3 style="margin-bottom:14px">⚙️ Settings</h3>
+  <label style="display:block;color:var(--soft);font-size:.8rem;margin-bottom:4px">Your Rocket League Name</label>
+  <input class="input" id="cfg-player-name" placeholder="e.g. Magnifico" style="margin-bottom:12px">
+  <label style="display:block;color:var(--soft);font-size:.8rem;margin-bottom:4px">Friend Names (one per line)</label>
+  <textarea class="input" id="cfg-friends" rows="3" style="margin-bottom:12px;resize:vertical"></textarea>
+  <div style="background:rgba(8,8,18,.8);border-radius:12px;padding:12px;margin-bottom:12px;border:1px solid var(--border2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:700;font-size:.82rem">🔧 RL Stats API</span><span id="rl-config-badge" style="font-size:.7rem">Checking...</span></div>
+    <p id="rl-config-msg" style="font-size:.72rem;color:var(--muted);margin-bottom:8px"></p>
+    <div style="display:flex;gap:6px"><button class="btn btn-ghost" onclick="checkRlConfig()">🔄 Check</button><button class="btn btn-primary" onclick="createRlConfig()">📝 Auto-Create</button></div>
+  </div>
+  <div style="background:rgba(8,8,18,.8);border-radius:12px;padding:12px;margin-bottom:14px;border:1px solid var(--border2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:700;font-size:.82rem">🔄 Auto-Update</span><span id="update-badge-modal" style="font-size:.7rem">Not checked</span></div>
+    <button class="btn btn-ghost" onclick="checkForUpdates()">🔄 Check for Updates</button>
+    <div id="update-results" style="display:none;margin-top:10px;font-size:.78rem"></div>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" onclick="toggleSettings()">Cancel</button><button class="btn btn-primary" onclick="saveSettings()">💾 Save</button></div>
+</div></div>
 <script>
-let activeSessionId=null,activeSession=null,listenerPollInterval=null,listenerState='not_running';
-async function api(url,opts={}){try{const r=await fetch(url,{headers:{'Content-Type':'application/json',...opts.headers},...opts});const d=await r.json();if(!r.ok)throw new Error(d.error||`HTTP ${r.status}`);return d}catch(e){if(e.message.includes('Failed to fetch'))throw new Error('Server not reachable');throw e}}
-function showToast(m){const e=document.createElement('div');e.className='toast';e.textContent=m;document.getElementById('toast-container').appendChild(e);setTimeout(()=>e.remove(),3000)}
-function formatDate(iso){const d=new Date(iso);return d.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+let activeSessionId=null,activeSession=null,statsMode='all',statsPlaylist='all',playlistsCache=[];
+async function api(url,opts={}){const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});let d={};try{d=await r.json()}catch(e){} if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
+function showToast(m){const e=document.createElement('div');e.className='toast';e.textContent=m;document.getElementById('toast-container').appendChild(e);setTimeout(()=>e.remove(),3200)}
+function formatDate(iso){try{return new Date(iso).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return iso}}
 function relativeTime(iso){const d=new Date(iso),n=new Date(),diff=Math.floor((n-d)/1000);if(diff<60)return'just now';if(diff<3600)return Math.floor(diff/60)+'m ago';if(diff<86400)return Math.floor(diff/3600)+'h ago';return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
+function matchBadges(s){return`<span class="session-badge">⚽ ${s.goals||0}</span> <span class="session-badge">🎯 ${s.shots||0}</span> <span class="session-badge">🛡️ ${s.saves||0}</span> <span class="session-badge">💥 ${s.demos_given||0}</span>`}
+function gradeColor(g){g=(g||'').toUpperCase();if(g.startsWith('A'))return'var(--green)';if(g.startsWith('B'))return'var(--cyan)';if(g.startsWith('C'))return'var(--orange)';return'var(--red)'}
+function trendIcon(t){return t==='up'?'↑':t==='down'?'↓':'→'}
+function trendClass(t){return t==='up'?'trend-up':t==='down'?'trend-down':'trend-flat'}
 
-document.querySelectorAll('.nav-btn').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById('panel-'+b.dataset.tab).classList.add('active');const mr=document.getElementById('matryoshka-root');if(mr)mr.style.display='none';if(b.dataset.tab==='active-session')loadActiveSession();if(b.dataset.tab==='history')loadHistory();if(b.dataset.tab==='stats'){loadStats();loadMatryoshka();if(mr)mr.style.display='block'}if(b.dataset.tab==='coach')loadCoach()})});
+document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+b.dataset.tab).classList.add('active');
+  if(b.dataset.tab==='active-session')loadActiveSession();
+  if(b.dataset.tab==='history')loadHistory();
+  if(b.dataset.tab==='stats')loadStats();
+  if(b.dataset.tab==='coach')loadCoach();
+}));
 
-// ====== MATRYOSHKA 3-LAYER DEPTH NAVIGATION ======
-// L0: Hero cards (Score / Record / Highlight)
-// L1: 4 category bars (Shot Power, Movement & Boost, Combat, Ball Control)
-// L2: Deep metrics for the selected category
-let m_l1Open = false, m_l2Category = null;
-
-const CATEGORIES = [
-  {
-    id: 'shot-power', title: '🎯 Shot Power', color: '#ff7b35',
-    fields: ['all_time_fastest_goal', 'overall_avg_shot_power', 'shot_accuracy', 'total_shots'],
-    render: function(a) {
-      return '<div class="l2-section"><h3>🎯 Shot Power &amp; Accuracy</h3>'
-        +'<div class="l2-metrics">'
-        +'<div class="l2-metric orange"><div class="metric-value">'+(a.all_time_fastest_goal>0?a.all_time_fastest_goal+' km/h':'—')+'</div><div class="metric-label">Fastest Goal</div></div>'
-        +'<div class="l2-metric blue"><div class="metric-value">'+(a.overall_avg_shot_power>0?Math.round(a.overall_avg_shot_power)+' km/h':'—')+'</div><div class="metric-label">Avg Shot Power</div></div>'
-        +'<div class="l2-metric green"><div class="metric-value">'+(a.shot_accuracy||0)+'%</div><div class="metric-label">Shot Accuracy</div><div class="l2-metric-bar"><div class="l2-metric-bar-fill" style="width:'+Math.min(a.shot_accuracy||0,100)+'%;background:var(--green)"></div></div></div>'
-        +'<div class="l2-metric"><div class="metric-value">'+(a.total_shots||0)+'</div><div class="metric-label">Total Shots</div></div>'
-        +'</div></div>';
-    },
-    score: function(a){ return Math.min( ((a.shot_accuracy||0)/100*100 + (a.total_shots/500*100))/2, 100).toFixed(0); }
-  },
-  {
-    id: 'movement', title: '⛽ Movement & Boost', color: '#4a9eff',
-    fields: ['avg_boost','avg_boost_time','avg_supersonic_time','avg_air_time'],
-    render: function(a) {
-      return '<div class="l2-section"><h3>⛽ Movement &amp; Boost</h3>'
-        +'<div class="l2-metrics">'
-        +'<div class="l2-metric blue"><div class="metric-value">'+(a.avg_boost||0)+'%</div><div class="metric-label">Avg Boost</div><div class="l2-metric-bar"><div class="l2-metric-bar-fill" style="width:'+(a.avg_boost||0)+'%;background:var(--blue)"></div></div></div>'
-        +'<div class="l2-metric"><div class="metric-value">'+(a.avg_boost_time||0)+'%</div><div class="metric-label">Time Boosting</div></div>'
-        +'<div class="l2-metric orange"><div class="metric-value">'+(a.avg_supersonic_time||0)+'%</div><div class="metric-label">Supersonic Time</div></div>'
-        +'<div class="l2-metric"><div class="metric-value">'+(a.avg_air_time||0)+'%</div><div class="metric-label">Air Time</div></div>'
-        +'<div class="l2-metric"><div class="metric-value">'+(a.avg_ground_time||0)+'%</div><div class="metric-label">Ground Time</div></div>'
-        +'<div class="l2-metric blue"><div class="metric-value">'+(a.avg_wall_time||0)+'%</div><div class="metric-label">Wall Time</div></div>'
-        +'</div></div>';
-    },
-    score: function(a){ return (((a.avg_boost||0)+(a.avg_boost_time||0))/2).toFixed(0); }
-  },
-  {
-    id: 'combat', title: '💥 Combat', color: '#f87171',
-    fields: ['total_demos_given','total_demos_taken','total_saves','total_assists','total_overtime'],
-    render: function(a) {
-      const demosTaken = a.total_demos_taken||0;
-      const ratioStr = a.total_demos_given>0 && demosTaken>0
-        ? (a.total_demos_given/demosTaken).toFixed(1)+'x'
-        : (a.total_demos_given>0 ? '∞' : '0x');
-      return '<div class="l2-section"><h3>💥 Combat</h3>'
-        +'<div class="l2-metrics">'
-        +'<div class="l2-metric green"><div class="metric-value">'+(a.total_demos_given||0)+'</div><div class="metric-label">Demos Given</div></div>'
-        +'<div class="l2-metric red"><div class="metric-value">'+demosTaken+'</div><div class="metric-label">Demos Taken</div></div>'
-        +'<div class="l2-metric orange"><div class="metric-value">'+ratioStr+'</div><div class="metric-label">Demo Ratio</div></div>'
-        +'<div class="l2-metric blue"><div class="metric-value">'+(a.total_saves||0)+'</div><div class="metric-label">Total Saves</div></div>'
-        +'<div class="l2-metric"><div class="metric-value">'+(a.total_assists||0)+'</div><div class="metric-label">Assists</div></div>'
-        +'<div class="l2-metric"><div class="metric-value">'+(a.total_overtime||0)+'</div><div class="metric-label">Overtime (s)</div></div>'
-        +'</div></div>';
-    },
-    score: function(a){ const tg=a.total_demos_given||0,tt=a.total_demos_taken||0; return (tt>0?(tg/(tg+tt))*100:tg>0?100:0).toFixed(0); }
-  },
-  {
-    id: 'ball-control', title: '⚽ Ball Control', color: '#818cf8',
-    fields: ['total_touches','total_car_touches','total_goals','total_matches'],
-    render: function(a) {
-      const gpm = a.total_matches>0 ? (a.total_goals/a.total_matches).toFixed(2) : '0.00';
-      const tpm = a.total_matches>0 ? Math.round(a.total_touches/a.total_matches) : 0;
-      return '<div class="l2-section"><h3>⚽ Ball Control</h3>'
-        +'<div class="l2-metrics">'
-        +'<div class="l2-metric green"><div class="metric-value">'+(a.total_goals||0)+'</div><div class="metric-label">Total Goals</div></div>'
-        +'<div class="l2-metric orange"><div class="metric-value">'+gpm+'</div><div class="metric-label">Goals/Match</div></div>'
-        +'<div class="l2-metric"><div class="metric-value">'+(a.total_touches||0)+'</div><div class="metric-label">Total Touches</div></div>'
-        +'<div class="l2-metric blue"><div class="metric-value">'+tpm+'</div><div class="metric-label">Touches/Match</div></div>'
-        +'<div class="l2-metric"><div class="metric-value">'+(a.total_car_touches||0)+'</div><div class="metric-label">Car Touches</div></div>'
-        +'<div class="l2-metric"><div class="metric-value">'+(a.total_matches||0)+'</div><div class="metric-label">Total Matches</div></div>'
-        +'</div></div>';
-    },
-    score: function(a){ const tpm=a.total_matches>0?(a.total_touches/a.total_matches):0; return Math.min(tpm/3,100).toFixed(0); }
-  }
-];
-
-function getScoreColor(pct) {
-  if (pct >= 70) return 'var(--green)';
-  if (pct >= 40) return 'var(--orange)';
-  return 'var(--red)';
+async function loadActiveSession(){
+  const c=document.getElementById('active-content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';
+  try{
+    const ss=await api('/api/sessions');const a=ss.find(s=>s.status==='active');
+    if(!a){activeSessionId=null;activeSession=null;c.innerHTML=`<div class="card" style="text-align:center"><h3 style="margin-bottom:10px">No active session</h3><p style="color:var(--muted)">Enter your RL name in Settings and start playing — sessions auto-create.</p></div>`;return}
+    activeSessionId=a.id;const f=await api('/api/sessions/'+a.id);activeSession=f;renderActiveSession(f);
+  }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
 }
-
-// Render L0 hero cards (called once after first data fetch)
-function renderL0(statsOverview, lastMatch) {
-  const totalGoals = statsOverview.overall ? statsOverview.overall.wins + statsOverview.overall.losses : 0;
-  const w = statsOverview.overall ? statsOverview.overall.wins : 0;
-  const l = statsOverview.overall ? statsOverview.overall.losses : 0;
-  const hasData = (w + l) > 0;
-
-  // Highlight from last match
-  let highlightValue = '—', highlightIcon = '—';
-  if (lastMatch) {
-    const ug = lastMatch.user_score || 0;
-    highlightValue = ug + ' goals';
-    highlightIcon = ug >= 3 ? '🔥' : ug > 0 ? '⚽' : '📊';
-  }
-
-  // Total goals from deep stats — we need async fetch; but we'll fill via loadMatryoshka
-  document.getElementById('matryoshka-l0').innerHTML =
-    '<div class="hero-card" onclick="toggleMatryoshkaL1(event,this)" data-l0="score">'
-      +'<span class="hero-icon">🏆</span>'
-      +'<div class="hero-title">Score</div>'
-      +'<div class="hero-value" id="hero-score">'+(hasData?'...':'—')+'</div>'
-      +'<div class="hero-subtitle">total goals</div>'
-    +'</div>'
-    +'<div class="hero-card" onclick="toggleMatryoshkaL1(event,this)" data-l0="record">'
-      +'<span class="hero-icon">📊</span>'
-      +'<div class="hero-title">Record</div>'
-      +'<div class="hero-value">'+(hasData?w+'W · '+l+'L':'—')+'</div>'
-      +'<div class="hero-subtitle">'+(hasData?Math.round(w/(w+l)*100)+'% winrate':'no data yet')+'</div>'
-    +'</div>'
-    +'<div class="hero-card" onclick="toggleMatryoshkaL1(event,this)" data-l0="highlight">'
-      +'<span class="hero-icon">'+highlightIcon+'</span>'
-      +'<div class="hero-title">Last Match</div>'
-      +'<div class="hero-value">'+highlightValue+'</div>'
-      +'<div class="hero-subtitle">'+(lastMatch?lastMatch.result.toUpperCase()+' '+(lastMatch.user_score+'-'+lastMatch.opponent_score):'no matches yet')+'</div>'
-    +'</div>';
+function renderActiveSession(s){
+  const ms=s.matches||[],w=s.wins||0,l=s.losses||0,t=w+l;
+  let h=`<div class="card ${t>0?(w>=l?'win-card':'loss-card'):''}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div><h3 style="font-size:1.15rem">🎮 Active Session</h3>
+      <span style="color:var(--muted);font-size:.8rem">${formatDate(s.started_at)} · ${s.mode}${s.friend_name?' w/ '+s.friend_name:''}</span></div>
+      <button class="btn btn-danger" onclick="endSession()">End Session</button></div>`;
+  if(t>0){
+    h+=`<div style="text-align:center;margin:14px 0"><span style="color:var(--green);font-size:1.5rem;font-weight:800">🏆 ${w}W</span>
+      <span style="color:var(--muted);margin:0 8px">·</span><span style="color:var(--red);font-size:1.5rem;font-weight:800">💀 ${l}L</span>
+      <span style="color:var(--muted);margin:0 8px">·</span><span style="font-weight:800">${Math.round(w/t*100)}%</span></div>
+      <div class="actions" style="justify-content:center">
+        <button class="btn btn-share" onclick="shareSessionCard(${s.id})">✨ Share session card</button>
+        <button class="btn btn-ghost" onclick="downloadSessionCsv(${s.id})">⬇️ CSV</button>
+        <button class="btn btn-ghost" onclick="showCoachReport(${s.id})">🏆 Coach report</button>
+      </div>
+      <div id="session-coach-box"></div>`;
+    h+=ms.map(m=>`<div class="match-row" onclick="toggleMatchDetail(${m.id},this)" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap">
+      <span style="font-weight:600">Match</span>
+      <span style="font-size:1.05rem;font-weight:800">${m.user_score} - ${m.opponent_score}</span>
+      <span style="color:${m.result==='win'?'var(--green)':'var(--red)'};font-weight:700">${(m.result||'').toUpperCase()}</span>
+      <span style="font-size:.72rem;color:var(--muted)">${m.playlist||''}</span>
+      <span style="font-size:.72rem">${matchBadges(m)}</span>
+      <div class="match-detail-popup"></div></div>`).join('');
+  }else h+=`<div class="empty-state" style="padding:18px"><p>No matches yet. Play a game!</p></div>`;
+  h+=`</div>`;document.getElementById('active-content').innerHTML=h;
 }
+async function endSession(){if(!confirm('End this session?'))return;try{await api('/api/sessions/'+activeSessionId+'/end',{method:'POST'});showToast('Session ended');activeSessionId=null;loadActiveSession()}catch(e){showToast('❌ '+e.message)}}
 
-// L0 click → open/close L1
-function toggleMatryoshkaL1(e, card) {
-  const l1 = document.getElementById('matryoshka-l1');
-  const l2 = document.getElementById('matryoshka-l2');
-  const hint = document.getElementById('matryoshka-hint');
-  document.querySelectorAll('.hero-card').forEach(c=>c.classList.remove('active'));
-
-  if (m_l1Open) {
-    l1.classList.remove('open');
-    l2.classList.remove('open');
-    m_l1Open = false;
-    hint.style.display = 'block';
-    return;
-  }
-
-  card.classList.add('active');
-  l1.classList.add('open');
-  l2.classList.remove('open');
-  m_l1Open = true;
-  hint.style.display = 'none';
+async function loadHistory(){
+  const c=document.getElementById('history-content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';
+  try{
+    const ss=await api('/api/sessions');
+    if(!ss.length){c.innerHTML='<div class="empty-state"><h3>📋 No sessions yet</h3><p>Play some Rocket League!</p></div>';return}
+    c.innerHTML=ss.map(s=>{
+      const w=s.wins||0,l=s.losses||0,t=w+l,wr=t?Math.round(w/t*100):0;
+      const accent=t>0&&w>=l?'var(--green)':t>0?'var(--red)':'var(--violet)';
+      return`<div class="card session-card" style="border-left:4px solid ${accent}" onclick="toggleSessionExpand(${s.id})">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>${formatDate(s.started_at)}</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="session-badge">${s.mode==='duo'?'👥 Duo'+(s.friend_name?' w/ '+s.friend_name:''):'🧑 Solo'}</span>
+            <span class="session-badge ${s.status==='active'?'badge-active':'badge-completed'}">${s.status==='active'?'● Live':'✓ Done'}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;margin-top:10px;font-size:.85rem;flex-wrap:wrap">
+          <span>Matches: <b>${t}</b></span>
+          ${t?`<span style="color:var(--green)">🏆 ${w}W</span><span style="color:var(--red)">💀 ${l}L</span><span style="color:${wr>=50?'var(--green)':'var(--red)'}">${wr}%</span>`:'<span style="color:var(--muted)">No matches</span>'}
+        </div>
+        <div class="session-expand" id="expand-${s.id}" onclick="event.stopPropagation()"></div>
+      </div>`}).join('')+`<div id="older-matches" style="text-align:center;margin-top:12px"><button class="btn btn-primary" onclick="loadOlderMatches()">📜 Load older matches</button></div><div id="older-matches-results"></div>`;
+  }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
 }
-
-// Fill L1 rings after deep stats fetched
-function renderL1(deepAgg) {
-  const html = CATEGORIES.map(cat => {
-    const score = cat.score(deepAgg);
-    const scorePct = Math.min(score, 100);
-    return '<div class="ring-category" data-cat="'+cat.id+'" onclick="toggleMatryoshkaL2(event,this,\''+cat.id+'\')">'+
-      '<div class="ring-header">'+
-        '<span class="ring-title">'+cat.title+'</span>'+
-        '<span class="ring-score" style="color:'+getScoreColor(scorePct)+'">'+score+'%</span>'+
-      '</div>'+
-      '<div class="ring-bar"><div class="ring-bar-fill" style="width:'+scorePct+'%;background:linear-gradient(90deg,#4a9eff 0%,#ffffff 50%,'+cat.color+' 100%)"></div></div>'+
-    '</div>';
-  }).join('');
-  document.getElementById('matryoshka-l1-content').innerHTML = html;
+async function toggleSessionExpand(sid){
+  const e=document.getElementById('expand-'+sid);
+  if(e.classList.contains('open')){e.classList.remove('open');e.innerHTML='';return}
+  document.querySelectorAll('.session-expand.open').forEach(el=>{el.classList.remove('open');el.innerHTML=''});
+  e.classList.add('open');e.innerHTML='<div class="loading" style="padding:12px"><div class="spinner"></div></div>';
+  try{
+    const s=await api('/api/sessions/'+sid),ms=s.matches||[];
+    let h=ms.length?ms.map((m,i)=>`<div class="match-row" onclick="toggleMatchDetail(${m.id},this)" style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--border);flex-wrap:wrap;align-items:center">
+      <span>Match ${i+1}</span><span>${m.user_score}-${m.opponent_score}</span>
+      <span style="color:${m.result==='win'?'var(--green)':'var(--red)'};font-weight:700">${(m.result||'').toUpperCase()}</span>
+      <span style="font-size:.72rem;color:var(--muted)">${m.playlist||''}</span>
+      <span style="font-size:.72rem">${matchBadges(m)}</span><div class="match-detail-popup"></div></div>`).join(''):'<p style="color:var(--muted);padding:10px;text-align:center">No matches</p>';
+    h+=`<div class="actions"><button class="btn btn-share" onclick="shareSessionCard(${sid})">✨ Share card</button>
+      <button class="btn btn-ghost" onclick="downloadSessionCsv(${sid})">⬇️ CSV</button>
+      <button class="btn btn-ghost" onclick="showCoachReport(${sid},'expand-coach-${sid}')">🏆 Coach</button>
+      <button class="btn btn-danger" onclick="deleteSession(${sid})">🗑️ Delete</button></div>
+      <div id="expand-coach-${sid}"></div><div id="session-deep-${sid}" class="session-deep"></div>`;
+    e.innerHTML=h;loadSessionDeepStats(sid);
+  }catch(err){e.innerHTML=`<p style="color:var(--red);padding:10px">${err.message}</p>`}
 }
-
-// L1 click → open L2 with that category's metrics
-function toggleMatryoshkaL2(e, el, catId) {
-  const l2 = document.getElementById('matryoshka-l2');
-  const cat = CATEGORIES.find(c=>c.id===catId);
-  if (!cat) return;
-
-  document.querySelectorAll('.ring-category').forEach(c=>c.classList.remove('active'));
-
-  if (m_l2Category === catId) {
-    l2.classList.remove('open');
-    m_l2Category = null;
-    return;
-  }
-
-  el.classList.add('active');
-  m_l2Category = catId;
-  // L2 content filled in loadMatryoshka callback via _latestDeepAgg
-  l2.classList.add('open');
-  renderL2ForCategory(catId);
+async function loadSessionDeepStats(sid){
+  const c=document.getElementById('session-deep-'+sid);if(!c)return;
+  try{
+    const deep=await api('/api/sessions/'+sid+'/deep');const a=deep.aggregates||{};if(!a.total_matches){c.innerHTML='';return}
+    const fg=a.all_time_fastest_goal||0,asp=a.overall_avg_shot_power||0;
+    c.innerHTML=`<div class="deep-section"><h3>📊 Session deep stats</h3><div class="deep-metrics">
+      <div class="metric-card orange"><div class="metric-value">${fg>0?Number(fg).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Fastest Goal</div></div>
+      <div class="metric-card blue"><div class="metric-value">${asp>0?Number(asp).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Avg Shot Power</div></div>
+      <div class="metric-card green"><div class="metric-value">${a.shot_accuracy||0}%</div><div class="metric-label">Accuracy</div></div>
+      <div class="metric-card"><div class="metric-value">${a.total_shots||0}</div><div class="metric-label">Shots</div></div>
+      <div class="metric-card"><div class="metric-value">${a.avg_wall_time||0}%</div><div class="metric-label">Wall</div></div>
+      <div class="metric-card green"><div class="metric-value">${a.total_goals||0}</div><div class="metric-label">Goals</div></div>
+    </div></div>`;
+  }catch(e){c.innerHTML=''}
 }
-
-let _latestDeepAgg = {};
-function renderL2ForCategory(catId) {
-  const cat = CATEGORIES.find(c=>c.id===catId);
-  if (!cat) return;
-  const html = cat.render(_latestDeepAgg);
-  document.getElementById('matryoshka-l2-content').innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
-    +'<span style="font-size:.75rem;color:var(--text-muted)">Detailed stats</span>'
-    +'<button class="btn btn-ghost" onclick="closeMatryoshkaL2(event)">✕ Close</button>'
-    +'</div>'+html;
-}
-
-function closeMatryoshkaL2(e) {
-  if (e) e.stopPropagation();
-  document.getElementById('matryoshka-l2').classList.remove('open');
-  document.querySelectorAll('.ring-category').forEach(c=>c.classList.remove('active'));
-  m_l2Category = null;
-}
-
-// Main entry point: called from loadStats after data is loaded
-async function loadMatryoshka() {
-  try {
-    const stats = await api('/api/stats');
-    const deep = await api('/api/stats/deep');
-    const agg = deep.aggregates || {};
-    _latestDeepAgg = agg;
-
-    // Total goals for hero score
-    const totalGoals = agg.total_goals || agg.total_shots || 0;
-    const hasData = (stats.overall.wins + stats.overall.losses) > 0;
-
-    if (!hasData) {
-      document.getElementById('matryoshka-root').style.display = 'none';
-      return;
-    }
-
-    // Last session → last match
-    let lastMatch = null;
-    try {
-      const sessions = await api('/api/sessions');
-      const latestSession = sessions.find(s=>true); // already sorted by played_at desc from DB
-      if (latestSession) {
-        const full = await api('/api/sessions/'+latestSession.id);
-        if (full.matches && full.matches.length > 0) {
-          lastMatch = full.matches[full.matches.length - 1];
-        }
-      }
-    } catch(e) { /* OK — no sessions */ }
-
-    document.getElementById('matryoshka-root').style.display = 'block';
-    renderL0(stats, lastMatch);
-
-    // Fill hero score from deep stats total goals
-    const heroScoreEl = document.getElementById('hero-score');
-    if (heroScoreEl) heroScoreEl.textContent = (agg.total_goals||0);
-
-    // Render L1 categories
-    renderL1(agg);
-
-    // If L2 is already open, re-render it with fresh data
-    if (m_l2Category) renderL2ForCategory(m_l2Category);
-
-  } catch(e) {
-    // Silently hide Matryoshka if anything fails — don't break main UI
-    document.getElementById('matryoshka-root').style.display = 'none';
-  }
-}
-
-// ====== ACTIVE SESSION (AUTO-TRACK ONLY - no manual input) ======
-async function loadActiveSession(){const c=document.getElementById('active-content');c.innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';try{const ss=await api('/api/sessions');const a=ss.find(s=>s.status==='active');if(a){activeSessionId=a.id;const f=await api('/api/sessions/'+a.id);activeSession=f;renderActiveSession(f)}else{activeSessionId=null;activeSession=null;c.innerHTML='<div class="card" style="text-align:center"><h3 style="margin-bottom:12px">No active session</h3><p style="color:var(--text-muted);margin-bottom:16px">The listener auto-creates sessions when matches are detected.<br>Enter your RL name in Settings and start playing!</p><p style="font-size:.7rem;color:var(--text-muted);margin-top:24px">⏻ Exit button — bottom right, next to ⚙️</p></div>'}}catch(e){c.innerHTML='<div class="empty-state"><p>Error: '+e.message+'</p></div>'}}
-
-function renderActiveSession(s){const ms=s.matches||[],w=s.wins||0,l=s.losses||0,t=w+l;let h='<div class="card '+(t>0?(w>=l?'win-card':'loss-card'):'')+'"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div><h3 style="font-size:1.1rem">🎮 Active Session</h3><span style="color:var(--text-muted);font-size:.8rem">'+formatDate(s.started_at)+' · '+s.mode+(s.friend_name?' w/ '+s.friend_name:'')+'</span></div><button class="btn btn-danger" onclick="endSession()">End Session</button></div>';if(t>0){h+='<div style="text-align:center;margin-bottom:12px"><span style="color:var(--green);font-size:1.4rem;font-weight:800">🏆 '+w+'W</span> <span style="color:var(--text-muted);margin:0 8px">·</span> <span style="color:var(--red);font-size:1.4rem;font-weight:800">💀 '+l+'L</span> <span style="color:var(--text-muted);margin:0 8px">·</span> <span style="font-weight:700">'+(t>0?Math.round(w/t*100):0)+'%</span></div>';h+=ms.map(m=>'<div class="match-row" onclick="event.stopPropagation();toggleMatchDetail('+m.id+',this)" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border)"><span style="font-weight:600">Match</span><span style="font-size:1.1rem;font-weight:700">'+m.user_score+' - '+m.opponent_score+'</span><span style="color:'+(m.result==='win'?'var(--green)':'var(--red)')+';font-weight:600">'+m.result.toUpperCase()+'</span><span style="font-size:.68rem;color:var(--text-muted);margin-left:8px">'+matchBadges(m)+'</span>'+'<div class="match-detail-popup"></div></div>').join('')+'<p style="text-align:center;margin-top:12px;font-size:.7rem;color:var(--text-muted)">Matches are tracked automatically — play and they appear</p><div class="legend"><span>⚽ Goals</span><span>🎯 Shots</span><span>🛡️ Saves</span><span>💥 Demos</span></div>'}else{h+='<div class="empty-state" style="padding:20px"><p>No matches yet. Play a game!</p></div>'}h+='</div>';document.getElementById('active-content').innerHTML=h}
-
-async function endSession(){if(!confirm('End this session?'))return;try{await api('/api/sessions/'+activeSessionId+'/end',{method:'POST'});showToast('Session ended! '+activeSession.wins+'W - '+activeSession.losses+'L');activeSessionId=null;activeSession=null;loadActiveSession()}catch(e){showToast('❌ '+e.message)}}
-
-// ====== History ======
-async function loadHistory(){const c=document.getElementById('history-content');c.innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';try{const ss=await api('/api/sessions');if(!ss.length){c.innerHTML='<div class="empty-state"><h3>📋 No sessions yet</h3><p>Play some Rocket League!</p></div><div class="legend"><span>⚽ Goals</span><span>🎯 Shots</span><span>🛡️ Saves</span><span>💥 Demos</span></div>';return}c.innerHTML=ss.map(s=>{const w=s.wins||0,l=s.losses||0,t=w+l,wr=t>0?Math.round(w/t*100):0,accent=t>0&&w>=l?'var(--green)':t>0?'var(--red)':'var(--border-active)';return'<div class="card session-card" id="session-'+s.id+'" style="border-left:4px solid '+accent+'"><div style="display:flex;justify-content:space-between;align-items:center"><span>'+formatDate(s.started_at)+'</span><div style="display:flex;gap:6px;align-items:center"><span class="session-badge '+(s.mode==='duo'?'':'')+'">'+(s.mode==='duo'?'👥 Duo'+(s.friend_name?' w/ '+s.friend_name:''):'🧑 Solo')+'</span><span class="session-badge '+(s.status==='active'?'badge-active':'badge-completed')+'">'+(s.status==='active'?'● Live':'✓ Done')+'</span></div></div><div style="display:flex;gap:16px;margin-top:10px;font-size:.85rem"><span>Matches: <b>'+t+'</b></span>'+(t>0?'<span style="color:var(--green)">🏆 '+w+'W</span><span style="color:var(--red)">💀 '+l+'L</span><span style="color:'+(wr>=50?'var(--green)':'var(--red)')+'">'+wr+'%</span>':'<span style="color:var(--text-muted)">No matches</span>')+'</div><div class="session-expand" id="expand-'+s.id+'"></div></div>'}).join('')+'<div class="legend"><span>⚽ Goals</span><span>🎯 Shots</span><span>🛡️ Saves</span><span>💥 Demos</span></div><div id="older-matches" style="margin-top:20px;text-align:center"><button class="btn btn-primary" onclick="loadOlderMatches()">📜 Load older matches</button><p style="color:var(--text-muted);font-size:.7rem;margin-top:6px">Summaries for matches 51+</p></div><div id="older-matches-results"></div>';ss.forEach(s=>{const card=document.getElementById('session-'+s.id);if(card)card.addEventListener('click',async e=>{if(e.target.closest('button'))return;await toggleSessionExpand(s.id)})})}catch(e){c.innerHTML='<div class="empty-state"><p>Error: '+e.message+'</p></div>'}}
-
-async function toggleSessionExpand(sid){const e=document.getElementById('expand-'+sid);if(e.classList.contains('open')){e.classList.remove('open');e.innerHTML='';return}document.querySelectorAll('.session-expand.open').forEach(el=>{el.classList.remove('open');el.innerHTML=''});e.classList.add('open');e.innerHTML='<div class="loading" style="padding:12px"><div class="spinner"></div></div>';try{const s=await api('/api/sessions/'+sid),ms=s.matches||[];let h=ms.length===0?'<p style="color:var(--text-muted);text-align:center;padding:12px">No matches in this session</p>':'<div style="margin-top:8px">'+ms.map((m,i)=>'<div class="match-row" onclick="toggleMatchDetail('+m.id+',this)" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border);cursor:pointer"><span>Match '+(i+1)+'</span><span>'+m.user_score+' - '+m.opponent_score+'</span><span style="color:'+(m.result==='win'?'var(--green)':'var(--red)')+';font-weight:600">'+m.result.toUpperCase()+'</span><span style="font-size:.68rem;color:var(--text-muted);margin-left:8px">'+matchBadges(m)+'</span>'+'<div class="match-detail-popup"></div></div>').join('')+'</div>';h+='<div id="session-deep-'+sid+'" class="session-deep"><div class="loading" style="padding:8px"><div class="spinner"></div></div></div>';h+='<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button class="btn btn-danger" onclick="event.stopPropagation();deleteSession('+sid+')">🗑️ Delete Session</button></div>';e.innerHTML=h;loadSessionDeepStats(sid)}catch(err){e.innerHTML='<p style="color:var(--red);padding:12px">Error: '+err.message+'</p>'}}
-async function deleteSession(sid){if(!confirm('Delete this entire session?'))return;try{await api('/api/sessions/'+sid,{method:'DELETE'});showToast('🗑️ Session deleted');if(activeSessionId===sid){activeSessionId=null;activeSession=null}loadHistory()}catch(e){showToast('❌ '+e.message)}}
-function matchBadges(s){return'<span title="Goals">⚽ '+(s.goals||0)+'</span><span title="Shots">🎯 '+(s.shots||0)+'</span><span title="Saves">🛡️ '+(s.saves||0)+'</span><span title="Demos">💥 '+(s.demos_given||0)+'</span>'}
+async function deleteSession(sid){if(!confirm('Delete this entire session?'))return;try{await api('/api/sessions/'+sid,{method:'DELETE'});showToast('Deleted');loadHistory()}catch(e){showToast('❌ '+e.message)}}
 let olderMatchesOffset=0;
-async function loadOlderMatches(){const c=document.getElementById('older-matches-results');const btn=document.querySelector('#older-matches button');if(btn){btn.disabled=true;btn.textContent='Loading...'}try{const r=await api('/api/matches/summaries?offset='+olderMatchesOffset+'&limit=50'),sums=r.summaries||[];if(!sums.length){if(olderMatchesOffset===0)c.innerHTML='<p style="color:var(--text-muted);text-align:center;padding:12px">No older match summaries yet</p>';else c.insertAdjacentHTML('beforeend','<p style="color:var(--text-muted);text-align:center;padding:12px">No more matches</p><div class="legend"><span>⚽ Goals</span><span>🎯 Shots</span><span>🛡️ Saves</span><span>💥 Demos</span></div>');if(btn){btn.style.display='none'}return}let h=sums.map(s=>{const icon=s.highlight_icon||'⚽',ht=s.highlight_text||'Match',hv=s.highlight_value||0,accent=s.result==='win'?'var(--green)':'var(--red)';return'<div class="card" style="border-left:4px solid '+accent+';margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:center"><div><span style="font-weight:600">'+s.user_score+' - '+s.opponent_score+'</span><span style="margin-left:10px;color:'+accent+';font-weight:600">'+s.result.toUpperCase()+'</span></div><span style="color:var(--text-muted);font-size:.75rem">'+relativeTime(s.played_at)+'</span></div><div style="display:flex;gap:12px;margin-top:6px;font-size:.78rem;color:var(--text-secondary)"><span>'+icon+' '+ht+': <b>'+hv+'</b></span><span>⚽ '+s.goals+'</span><span>🎯 '+s.shots+'</span><span>🛡️ '+s.saves+'</span><span>💥 '+s.demos_given+'</span></div></div>'}).join('');c.insertAdjacentHTML('beforeend',h);olderMatchesOffset+=sums.length;if(btn){btn.disabled=false;btn.textContent='📜 Load older matches'}c.insertAdjacentHTML('beforeend','<div class="legend"><span>⚽ Goals</span><span>🎯 Shots</span><span>🛡️ Saves</span><span>💥 Demos</span></div>');if(sums.length<50&&btn){btn.style.display='none'}}catch(e){c.innerHTML='<p style="color:var(--red);padding:12px">Error: '+e.message+'</p>';if(btn){btn.disabled=false;btn.textContent='📜 Retry'}}}
+async function loadOlderMatches(){
+  const c=document.getElementById('older-matches-results');
+  try{
+    const r=await api('/api/matches/summaries?offset='+olderMatchesOffset+'&limit=50');const sums=r.summaries||[];
+    if(!sums.length){c.insertAdjacentHTML('beforeend','<p style="color:var(--muted);text-align:center;padding:12px">No more matches</p>');return}
+    c.insertAdjacentHTML('beforeend',sums.map(s=>{
+      const accent=s.result==='win'?'var(--green)':'var(--red)';
+      return`<div class="card" style="border-left:4px solid ${accent}"><div style="display:flex;justify-content:space-between"><div><b>${s.user_score}-${s.opponent_score}</b> <span style="color:${accent};font-weight:700">${(s.result||'').toUpperCase()}</span></div><span style="color:var(--muted);font-size:.75rem">${relativeTime(s.played_at)}</span></div>
+      <div style="margin-top:6px;font-size:.78rem;color:var(--soft)">${s.highlight_icon||'⚽'} ${s.highlight_text||''}: <b>${s.highlight_value||0}</b> · ${s.playlist||''} · ⚽${s.goals} 🎯${s.shots} 🛡️${s.saves} 💥${s.demos_given}</div></div>`}).join(''));
+    olderMatchesOffset+=sums.length;
+  }catch(e){showToast('❌ '+e.message)}
+}
 
+async function loadStats(){
+  const c=document.getElementById('stats-content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Loading stats...</div>';
+  try{
+    if(!playlistsCache.length){try{const pl=await api('/api/stats/playlists');playlistsCache=pl.playlists||[]}catch(e){}}
+    const q=new URLSearchParams();if(statsMode!=='all')q.set('mode',statsMode);if(statsPlaylist!=='all')q.set('playlist',statsPlaylist);
+    const qs=q.toString()?('?'+q.toString()):'';
+    const s=await api('/api/stats'+qs);const t=s.overall.total||0;
+    const chipsMode=[['all','All'],['solo','Solo'],['duo','Duo']].map(([v,l])=>`<button class="chip ${statsMode===v?'active':''}" onclick="statsMode='${v}';loadStats()">${l}</button>`).join('');
+    const chipsPl=[`<button class="chip ${statsPlaylist==='all'?'active':''}" onclick="statsPlaylist='all';loadStats()">All playlists</button>`]
+      .concat(playlistsCache.map(p=>`<button class="chip ${statsPlaylist===p.playlist?'active':''}" onclick="statsPlaylist='${String(p.playlist).replace(/'/g,"\\'")}';loadStats()">${p.playlist} (${p.total})</button>`)).join('');
+    if(!t){c.innerHTML=`<div style="text-align:center"><button class="refresh-btn" onclick="loadStats()">🔄 Refresh Stats</button></div><div class="filters">${chipsMode}</div><div class="filters">${chipsPl}</div><div class="empty-state"><h3>📊 No stats for this filter</h3></div>`;return}
+    const owr=Math.round((s.overall.wins||0)/t*100),swr=s.solo.total?Math.round(s.solo.wins/s.solo.total*100):0,dwr=s.duo.total?Math.round(s.duo.wins/s.duo.total*100):0;
+    const buildForm=rs=>{const dots=rs.map(r=>`<div class="form-dot ${r}">${r==='win'?'W':'L'}</div>`);while(dots.length<20)dots.push('<div class="form-dot placeholder">-</div>');return dots.join('')};
+    const calcStreak=rs=>{let n=0;for(const r of (rs||[])){if(r!=='win')break;n++}return n};
+    const soloHtml=buildForm((s.recent_solo||[]).slice().reverse());const duoHtml=buildForm((s.recent_duo||[]).slice().reverse());
+    const ss=calcStreak(s.recent_solo||[]),ds=calcStreak(s.recent_duo||[]);
+    c.innerHTML=`<div style="text-align:center"><button class="refresh-btn" onclick="loadStats()">🔄 Refresh Stats</button></div>
+      <div class="filters">${chipsMode}</div><div class="filters">${chipsPl}</div>
+      <div class="stats-grid">
+        <div class="stat-card ${owr>=50?'win-card':'loss-card'}"><h4>Filtered</h4><div class="big-number">${owr}%</div><div style="color:var(--soft);font-size:.8rem">${s.overall.wins||0}W · ${s.overall.losses||0}L · ${t} games</div><div class="winrate-bar"><div class="winrate-fill" style="width:${owr}%"></div></div></div>
+        <div class="stat-card ${swr>=50?'win-card':'loss-card'}"><h4>🧑 Solo</h4><div class="big-number">${swr}%</div><div style="color:var(--soft);font-size:.8rem">${s.solo.wins||0}W · ${s.solo.losses||0}L</div>
+          <div class="recent-form">${soloHtml}</div>${ss>=3?`<div class="streak-badge hot">🔥 ${ss} W streak</div>`:''}</div>
+        <div class="stat-card ${dwr>=50?'win-card':'loss-card'}"><h4>👥 Duo</h4><div class="big-number">${dwr}%</div><div style="color:var(--soft);font-size:.8rem">${s.duo.wins||0}W · ${s.duo.losses||0}L</div>
+          <div class="recent-form">${duoHtml}</div>${ds>=3?`<div class="streak-badge hot">🔥 ${ds} W streak</div>`:''}</div>
+      </div><div id="deep-stats-container"></div>`;
+    loadDeepStats(qs);
+  }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
+}
+async function loadDeepStats(qs=''){
+  const c=document.getElementById('deep-stats-container');if(!c)return;
+  try{
+    const deep=await api('/api/stats/deep'+qs);const a=deep.aggregates||{};if(!a.total_matches){c.innerHTML='';return}
+    const n1=v=>Number(v||0);const fg=a.all_time_fastest_goal||0,asp=a.overall_avg_shot_power||0,sa=a.shot_accuracy||0;
+    c.innerHTML=`<div class="deep-section"><h3>🎯 Shot Power & Accuracy</h3><div class="deep-metrics">
+      <div class="metric-card orange"><div class="metric-value">${fg>0?n1(fg).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Fastest Goal</div></div>
+      <div class="metric-card blue"><div class="metric-value">${asp>0?n1(asp).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Avg Shot Power</div></div>
+      <div class="metric-card green"><div class="metric-value">${sa}%</div><div class="metric-label">Shot Accuracy</div><div class="metric-bar"><div class="metric-bar-fill" style="width:${Math.min(sa,100)}%;background:var(--green)"></div></div></div>
+      <div class="metric-card"><div class="metric-value">${a.total_shots||0}</div><div class="metric-label">Total Shots</div></div></div></div>
+      <div class="deep-section"><h3>⛽ Movement & Boost</h3><div class="deep-metrics">
+      <div class="metric-card blue"><div class="metric-value">${a.avg_boost||0}%</div><div class="metric-label">Avg Boost</div></div>
+      <div class="metric-card"><div class="metric-value">${a.avg_boost_time||0}%</div><div class="metric-label">Time Boosting</div></div>
+      <div class="metric-card orange"><div class="metric-value">${a.avg_supersonic_time||0}%</div><div class="metric-label">Supersonic</div></div>
+      <div class="metric-card"><div class="metric-value">${a.avg_air_time||0}%</div><div class="metric-label">Air</div></div>
+      <div class="metric-card"><div class="metric-value">${a.avg_ground_time||0}%</div><div class="metric-label">Ground</div></div>
+      <div class="metric-card blue"><div class="metric-value">${a.avg_wall_time||0}%</div><div class="metric-label">Wall</div></div></div></div>
+      <div class="deep-section"><h3>💥 Combat & Ball</h3><div class="deep-metrics">
+      <div class="metric-card green"><div class="metric-value">${a.total_demos_given||0}</div><div class="metric-label">Demos Given</div></div>
+      <div class="metric-card red"><div class="metric-value">${a.total_demos_taken||0}</div><div class="metric-label">Demos Taken</div></div>
+      <div class="metric-card"><div class="metric-value">${a.total_saves||0}</div><div class="metric-label">Saves</div></div>
+      <div class="metric-card"><div class="metric-value">${a.total_overtime||0}</div><div class="metric-label">Overtimes</div></div>
+      <div class="metric-card"><div class="metric-value">${a.total_touches||0}</div><div class="metric-label">Touches</div></div>
+      <div class="metric-card green"><div class="metric-value">${a.total_goals||0}</div><div class="metric-label">Goals</div></div></div></div>`;
+  }catch(e){c.innerHTML='<p style="color:var(--red);text-align:center">Deep stats unavailable</p>'}
+}
 
-async function loadSessionDeepStats(sid){const c=document.getElementById('session-deep-'+sid);if(!c)return;try{const deep=await api('/api/sessions/'+sid+'/deep');const a=deep.aggregates||{};if(!a.total_matches){c.innerHTML='';return}const fg=a.all_time_fastest_goal||0,asp=a.overall_avg_shot_power||0,sa=a.shot_accuracy||0;c.innerHTML='<div class="deep-section"><h3>📊 Session Deep Stats</h3><div class="deep-metrics"><div class="metric-card orange"><div class="metric-value">'+(fg>0?Number(fg).toFixed(1)+' km/h':'—')+'</div><div class="metric-label">Fastest Goal</div></div><div class="metric-card blue"><div class="metric-value">'+(asp>0?Number(asp).toFixed(1)+' km/h':'—')+'</div><div class="metric-label">Avg Shot Power</div></div><div class="metric-card green"><div class="metric-value">'+sa+'%</div><div class="metric-label">Shot Accuracy</div></div><div class="metric-card"><div class="metric-value">'+(a.total_shots||0)+'</div><div class="metric-label">Shots</div></div><div class="metric-card blue"><div class="metric-value">'+(a.avg_boost||0)+'%</div><div class="metric-label">Avg Boost</div></div><div class="metric-card"><div class="metric-value">'+(a.avg_air_time||0)+'%</div><div class="metric-label">Air</div></div><div class="metric-card"><div class="metric-value">'+(a.avg_wall_time||0)+'%</div><div class="metric-label">Wall</div></div><div class="metric-card green"><div class="metric-value">'+(a.total_demos_given||0)+'</div><div class="metric-label">Demos</div></div><div class="metric-card"><div class="metric-value">'+(a.total_saves||0)+'</div><div class="metric-label">Saves</div></div><div class="metric-card green"><div class="metric-value">'+(a.total_goals||0)+'</div><div class="metric-label">Goals</div></div></div></div>'}catch(e){c.innerHTML='<p style="color:var(--red);font-size:.75rem;padding:6px">Deep stats unavailable</p>'}}
-
-// ====== Stats (FULL with deep stats) ======
-async function loadStats(){const c=document.getElementById('stats-content');c.innerHTML='<div class="loading"><div class="spinner"></div>Loading stats...</div>';try{const s=await api('/api/stats'),t=s.overall.total||0;if(!t){c.innerHTML='<div class="empty-state"><h3>📊 No stats yet</h3><p>Play some matches and they will show up here!</p></div>';return}const owr=Math.round(s.overall.wins/t*100),swr=s.solo.total>0?Math.round(s.solo.wins/s.solo.total*100):0,dwr=s.duo.total>0?Math.round(s.duo.wins/s.duo.total*100):0;const buildForm=rs=>{const dots=rs.map(r=>'<div class="form-dot '+r+'">'+(r==='win'?'W':'L')+'</div>');while(dots.length<20)dots.push('<div class="form-dot placeholder">-</div>');return dots.join('');};const calcStreak=rs=>{if(!rs||!rs.length)return 0;let s=0;for(const r of rs){if(r!=='win')break;s++}return s};const soloRecentHtml=buildForm((s.recent_solo||[]).slice().reverse());const soloStreak=calcStreak(s.recent_solo||[]);const duoRecentHtml=buildForm((s.recent_duo||[]).slice().reverse());const duoStreak=calcStreak(s.recent_duo||[]);let duoHtml='';if(s.duo_by_friend&&s.duo_by_friend.length>0){duoHtml='<h4 style="color:var(--text-muted);text-transform:uppercase;font-size:.75rem;letter-spacing:.06em;margin:24px 0 8px">👥 Duo Partners</h4>'+s.duo_by_friend.map(f=>{const fwr=f.total>0?Math.round(f.wins/f.total*100):0;return'<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px"><span style="font-weight:600">'+f.friend_name+'</span><span style="font-size:.8rem;color:var(--text-secondary)">🏆 '+f.wins+'W 💀 '+f.losses+'L · '+fwr+'% · '+f.total+' games</span></div>'}).join('')}c.innerHTML='<div style="text-align:center"><button class="refresh-btn" onclick="loadStats()">🔄 Refresh Stats</button></div><div class="stats-grid"><div class="stat-card '+(swr>=50?'win-card':'loss-card')+'"><h4>🧑 Solo</h4><div class="big-number">'+swr+'%</div><div style="color:var(--text-secondary);font-size:.8rem">'+(s.solo.wins||0)+'W · '+(s.solo.losses||0)+'L · '+(s.solo.total||0)+' games</div><div class="winrate-bar"><div class="winrate-fill" style="width:'+swr+'%"></div></div>'+(soloStreak>=3?'<div class="streak-badge hot">🔥 '+soloStreak+' win streak!</div>':'')+'<div class="recent-form" style="margin-top:12px;gap:4px">'+soloRecentHtml+'</div></div><div class="stat-card"><h4>👥 Duo</h4><div class="big-number">'+dwr+'%</div><div style="color:var(--text-secondary);font-size:.8rem">'+(s.duo.wins||0)+'W · '+(s.duo.losses||0)+'L · '+(s.duo.total||0)+' games</div><div class="winrate-bar"><div class="winrate-fill" style="width:'+dwr+'%"></div></div>'+(duoStreak>=3?'<div class="streak-badge hot">🔥 '+duoStreak+' win streak!</div>':'')+'<div class="recent-form" style="margin-top:12px;gap:4px">'+duoRecentHtml+'</div></div></div><div class="stat-card" style="margin-top:14px"><h4>📋 Sessions</h4><div class="big-number">'+s.sessions.completed+'</div><div style="color:var(--text-secondary);font-size:.8rem">completed · '+Math.round(t/Math.max(1,s.sessions.completed))+' avg matches/session</div></div>'+duoHtml+'<div id="deep-stats-container"></div>';loadDeepStats()}catch(e){c.innerHTML='<div class="empty-state"><p>Error: '+e.message+'</p></div>'}}
-
-async function loadDeepStats(){const c=document.getElementById('deep-stats-container');if(!c)return;try{const deep=await api('/api/stats/deep'),a=deep.aggregates||{};if(!a.total_matches){c.innerHTML='';return}const sa=a.shot_accuracy||0,fg=a.all_time_fastest_goal||0,asp=a.overall_avg_shot_power||0,ot=a.total_overtime||0;const n1=v=>(typeof v==='number'?v:0);c.innerHTML='<div class="deep-section"><h3>🎯 Shot Power & Accuracy</h3><div class="deep-metrics"><div class="metric-card orange"><div class="metric-value">'+(fg>0?n1(fg).toFixed(1)+' km/h':'—')+'</div><div class="metric-label">Fastest Goal</div></div><div class="metric-card blue"><div class="metric-value">'+(asp>0?n1(asp).toFixed(1)+' km/h':'—')+'</div><div class="metric-label">Avg Shot Power</div></div><div class="metric-card green"><div class="metric-value">'+sa+'%</div><div class="metric-label">Shot Accuracy</div><div class="metric-bar"><div class="metric-bar-fill" style="width:'+sa+'%;background:var(--green)"></div></div></div><div class="metric-card"><div class="metric-value">'+(a.total_shots||0)+'</div><div class="metric-label">Total Shots</div></div></div></div><div class="deep-section"><h3>⛽ Movement & Boost</h3><div class="deep-metrics"><div class="metric-card blue"><div class="metric-value">'+(a.avg_boost||0)+'%</div><div class="metric-label">Avg Boost</div><div class="metric-bar"><div class="metric-bar-fill" style="width:'+(a.avg_boost||0)+'%;background:var(--blue)"></div></div></div><div class="metric-card"><div class="metric-value">'+(a.avg_boost_time||0)+'%</div><div class="metric-label">Time Boosting</div></div><div class="metric-card orange"><div class="metric-value">'+(a.avg_supersonic_time||0)+'%</div><div class="metric-label">Supersonic</div></div><div class="metric-card"><div class="metric-value">'+(a.avg_air_time||0)+'%</div><div class="metric-label">Air Time</div></div><div class="metric-card"><div class="metric-value">'+(a.avg_ground_time||0)+'%</div><div class="metric-label">Ground Time</div></div><div class="metric-card blue"><div class="metric-value">'+(a.avg_wall_time||0)+'%</div><div class="metric-label">Wall Time</div></div></div></div><div class="deep-section"><h3>💥 Combat</h3><div class="deep-metrics"><div class="metric-card green"><div class="metric-value">'+(a.total_demos_given||0)+'</div><div class="metric-label">Demos Given</div></div><div class="metric-card red"><div class="metric-value">'+(a.total_demos_taken||0)+'</div><div class="metric-label">Demos Taken</div></div><div class="metric-card blue"><div class="metric-value">'+(a.total_saves||0)+'</div><div class="metric-label">Saves</div></div><div class="metric-card"><div class="metric-value">'+ot+'</div><div class="metric-label">Overtimes</div></div></div></div><div class="deep-section"><h3>🎮 Ball Control</h3><div class="deep-metrics"><div class="metric-card"><div class="metric-value">'+(a.total_touches||0)+'</div><div class="metric-label">Total Touches</div></div><div class="metric-card"><div class="metric-value">'+(a.total_car_touches||0)+'</div><div class="metric-label">Car Touches</div></div><div class="metric-card"><div class="metric-value">'+(a.total_assists||0)+'</div><div class="metric-label">Assists</div></div><div class="metric-card green"><div class="metric-value">'+(a.total_goals||0)+'</div><div class="metric-label">Total Goals</div></div></div></div>'}catch(e){c.innerHTML='<p style="color:var(--red);text-align:center;padding:12px">Deep stats unavailable</p>'}}
-
-// ====== Coach (TRIZ #25: Active Coach) ======
-// Renders /api/coach/records as the All-Time Records tab.
 async function loadCoach(){
   const c=document.getElementById('coach-content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Loading coach...</div>';
   try{
-    const r=await api('/api/coach/records');
-    const rec=r.records||{};
-    const tm=rec.total_matches||0;
-    if(!tm){c.innerHTML='<div class="empty-state"><h3>🏆 Coach is warming up</h3><p>Play at least one match and your records, anomalies and trends will appear here.</p></div>';return}
-    const wr=rec.total_wins||0,lo=rec.total_losses||0;
-    const wrPct=tm>0?Math.round(wr/tm*100):0;
-    const accent=wrPct>=50?'var(--green)':'var(--red)';
-
-    // Highlight cards (the 5 record types from the spec)
+    const r=await api('/api/coach/records');const rec=r.records||{};const tm=rec.total_matches||0;
+    const ss=await api('/api/sessions');
+    const withMatches=ss.filter(s=>(s.wins||0)+(s.losses||0)>0).slice(0,8);
+    let sessionPick=withMatches.map(s=>`<button class="chip" onclick="showCoachReport(${s.id},'coach-report-root')">${formatDate(s.started_at)} · ${(s.wins||0)}-${(s.losses||0)}</button>`).join('');
+    if(!tm){c.innerHTML='<div class="empty-state"><h3>🏆 Coach is warming up</h3><p>Play at least one match.</p></div>';return}
+    const wr=rec.total_wins||0,lo=rec.total_losses||0,wrPct=tm?Math.round(wr/tm*100):0;
     const cards=[
-      {icon:'⚽',label:'Most Goals',value:rec.most_goals?.value||0,mid:rec.most_goals?.match_id},
-      {icon:'💥',label:'Most Demos',value:rec.most_demos?.value||0,mid:rec.most_demos?.match_id},
-      {icon:'🛡️',label:'Most Saves',value:rec.most_saves?.value||0,mid:rec.most_saves?.match_id},
-      {icon:'🚀',label:'Fastest Goal',value:rec.fastest_goal_kph?.value||0,unit:' km/h',mid:rec.fastest_goal_kph?.match_id},
+      {icon:'⚽',label:'Most Goals',value:rec.most_goals?.value||0},
+      {icon:'💥',label:'Most Demos',value:rec.most_demos?.value||0},
+      {icon:'🛡️',label:'Most Saves',value:rec.most_saves?.value||0},
+      {icon:'🚀',label:'Fastest Goal',value:rec.fastest_goal_kph?.value||0,unit:' km/h'},
       {icon:'🎯',label:'Most Shots',value:rec.most_shots?.value||0},
-      {icon:'✋',label:'Most Touches',value:rec.most_touches?.value||0},
-      {icon:'🤝',label:'Most Assists',value:rec.most_assists?.value||0},
-      {icon:'⚡',label:'Top Supersonic',value:rec.highest_supersonic_time_pct?.value||0,unit:'%'},
       {icon:'⛽',label:'Top Boost Time',value:rec.highest_boost_time_pct?.value||0,unit:'%'},
-      {icon:'🔵',label:'Top Avg Boost',value:rec.highest_boost_avg?.value||0,unit:'%'},
-      {icon:'💥',label:'Top Avg Shot Power',value:rec.highest_avg_shot_power?.value||0,unit:' km/h'},
-    ];
-    const cardHtml=cards.map(k=>{
-      const v=k.value||0;if(!v)return'';
-      const midAttr=k.mid?`onclick="location.hash='match-'+${k.mid}"`:'';
-      return `<div class="metric-card" ${midAttr}><div class="metric-value">${v}${k.unit||''}</div><div class="metric-label">${k.icon} ${k.label}</div></div>`;
-    }).join('');
-
-    c.innerHTML=
-      `<div class="card" style="border-left:4px solid ${accent};margin-bottom:16px">
-        <h4 style="color:var(--text-muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Career</h4>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><span style="color:var(--green);font-size:1.4rem;font-weight:800">🏆 ${wr}W</span> <span style="color:var(--text-muted);margin:0 8px">·</span> <span style="color:var(--red);font-size:1.4rem;font-weight:800">💀 ${lo}L</span></div>
-          <span style="font-weight:700;color:${accent}">${wrPct}%</span>
-        </div>
-        <div class="winrate-bar"><div class="winrate-fill" style="width:${wrPct}%"></div></div>
-        <p style="color:var(--text-muted);font-size:.72rem;margin-top:8px">${tm} matches tracked</p>
-      </div>
-      <div class="card">
-        <h3 style="font-size:1rem;margin-bottom:14px">🏆 All-Time Records</h3>
-        <div class="deep-metrics">${cardHtml||'<p style="color:var(--text-muted);padding:12px">No records yet.</p>'}</div>
-      </div>`;
-  }catch(e){c.innerHTML='<div class="empty-state"><p>Error: '+e.message+'</p></div>'}
+    ].filter(k=>k.value).map(k=>`<div class="metric-card"><div class="metric-value">${k.value}${k.unit||''}</div><div class="metric-label">${k.icon} ${k.label}</div></div>`).join('');
+    c.innerHTML=`<div class="card" style="border-left:4px solid ${wrPct>=50?'var(--green)':'var(--red)'}">
+      <h4 style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Career</h4>
+      <div style="display:flex;justify-content:space-between;align-items:center"><div><span style="color:var(--green);font-size:1.4rem;font-weight:800">🏆 ${wr}W</span> <span style="color:var(--muted);margin:0 8px">·</span> <span style="color:var(--red);font-size:1.4rem;font-weight:800">💀 ${lo}L</span></div><span style="font-weight:800;color:${wrPct>=50?'var(--green)':'var(--red)'}">${wrPct}%</span></div>
+      <div class="winrate-bar"><div class="winrate-fill" style="width:${wrPct}%"></div></div>
+      <p style="color:var(--muted);font-size:.72rem;margin-top:8px">${tm} matches tracked</p></div>
+      <div class="card"><h3 style="margin-bottom:12px">🏆 All-time records</h3><div class="deep-metrics">${cards||'<p style="color:var(--muted)">No records yet</p>'}</div></div>
+      <div class="card"><h3 style="margin-bottom:10px">🧠 Coach 2.0 — session report</h3>
+      <p style="color:var(--muted);font-size:.8rem;margin-bottom:10px">Pick a session for grades + tips (solo or each player in duo).</p>
+      <div class="filters" style="justify-content:flex-start">${sessionPick||'<span style="color:var(--muted)">No sessions yet</span>'}</div>
+      <div id="coach-report-root"></div></div>`;
+  }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
 }
-
-// ====== Match Detail ======
-async function toggleMatchDetail(mid,el){const popup=el.querySelector('.match-detail-popup');if(popup.classList.contains('show')){popup.classList.remove('show');popup.innerHTML='';return}popup.classList.add('show');popup.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div></div>';try{const r=await api('/api/matches/'+mid);const d=r.details||{};const totalShots=d.shots||0;const userGoals=r.match.user_score||0;const sa=totalShots>0?Math.min(Math.round(userGoals/Math.max(totalShots,1)*100),100):0;let h='';
-// Coach insights for this match (loaded in parallel, failures swallowed)
-let coachHtml='';
-try{const cr=await api('/api/coach/match/'+mid);const ins=cr.insights||[];const base=cr.baseline||{};if(ins.length>0||base.matches_compared>0){coachHtml='<div class="deep-section"><h3>🏆 Coach Insights</h3>';if(ins.length===0){coachHtml+='<p style="color:var(--text-muted);font-size:.82rem;padding:4px 0">No anomalies vs last '+base.matches_compared+' matches.</p>'}else{coachHtml+='<div style="display:flex;flex-direction:column;gap:6px">';ins.forEach(i=>{const sevColor=i.severity==='good'?'var(--green)':i.severity==='warn'?'var(--red)':'var(--blue)';coachHtml+='<div style="background:var(--bg-input);border-left:3px solid '+sevColor+';border-radius:6px;padding:8px 12px;font-size:.85rem"><span style="margin-right:6px">'+i.icon+'</span>'+i.text+'</div>'});coachHtml+='</div>'}coachHtml+='</div>'}}catch(e){}
-h+=coachHtml;
-h+='<div class="deep-section"><h3>🎯 Shot Power & Accuracy</h3><div class="deep-metrics">';h+='<div class="metric-card orange"><div class="metric-value">'+(d.fastest_goal_kph>0?d.fastest_goal_kph.toFixed(1)+' km/h':'—')+'</div><div class="metric-label">Fastest Goal</div></div>';h+='<div class="metric-card blue"><div class="metric-value">'+(d.avg_shot_power>0?d.avg_shot_power.toFixed(1)+' km/h':'—')+'</div><div class="metric-label">Avg Shot Power</div></div>';h+='<div class="metric-card green"><div class="metric-value">'+sa+'%</div><div class="metric-label">Shot Accuracy</div><div class="metric-bar"><div class="metric-bar-fill" style="width:'+sa+'%;background:var(--green)"></div></div></div>';h+='<div class="metric-card"><div class="metric-value">'+totalShots+'</div><div class="metric-label">Total Shots</div></div></div></div>';h+='<div class="deep-section"><h3>⛽ Movement & Boost</h3><div class="deep-metrics">';h+='<div class="metric-card blue"><div class="metric-value">'+(d.boost_avg||0).toFixed(1)+'%</div><div class="metric-label">Avg Boost</div><div class="metric-bar"><div class="metric-bar-fill" style="width:'+(d.boost_avg||0).toFixed(1)+'%;background:var(--blue)"></div></div></div>';h+='<div class="metric-card"><div class="metric-value">'+(d.boost_time_pct||0).toFixed(1)+'%</div><div class="metric-label">Time Boosting</div></div>';h+='<div class="metric-card orange"><div class="metric-value">'+(d.supersonic_time_pct||0).toFixed(1)+'%</div><div class="metric-label">Supersonic</div></div>';h+='<div class="metric-card"><div class="metric-value">'+(d.air_time_pct||0).toFixed(1)+'%</div><div class="metric-label">Air Time</div></div>';h+='<div class="metric-card"><div class="metric-value">'+(d.ground_time_pct||0).toFixed(1)+'%</div><div class="metric-label">Ground Time</div></div>';h+='<div class="metric-card blue"><div class="metric-value">'+(d.wall_time_pct||0).toFixed(1)+'%</div><div class="metric-label">Wall Time</div></div></div></div>';h+='<div class="deep-section"><h3>💥 Combat</h3><div class="deep-metrics">';h+='<div class="metric-card green"><div class="metric-value">'+(d.demos_given||0)+'</div><div class="metric-label">Demos Given</div></div>';h+='<div class="metric-card red"><div class="metric-value">'+(d.demos_taken||0)+'</div><div class="metric-label">Demos Taken</div></div>';h+='<div class="metric-card blue"><div class="metric-value">'+(d.saves||0)+'</div><div class="metric-label">Saves</div></div>';h+='<div class="metric-card"><div class="metric-value">'+(d.overtime||0)+'</div><div class="metric-label">Overtime</div></div></div></div>';h+='<div class="deep-section"><h3>🎮 Ball Control</h3><div class="deep-metrics">';h+='<div class="metric-card"><div class="metric-value">'+(d.touches||0)+'</div><div class="metric-label">Total Touches</div></div>';h+='<div class="metric-card"><div class="metric-value">'+(d.car_touches||0)+'</div><div class="metric-label">Car Touches</div></div>';h+='<div class="metric-card"><div class="metric-value">'+(d.assists||0)+'</div><div class="metric-label">Assists</div></div>';h+='<div class="metric-card green"><div class="metric-value">'+userGoals+'</div><div class="metric-label">Your Goals</div></div></div></div>';popup.innerHTML=h}catch(e){popup.innerHTML='<p style="color:var(--red);padding:8px">'+e.message+'</p>'}}
-
-// ====== Listener Status ======
-function pollListenerStatus(){api('/api/listener-status').then(s=>{listenerState=s.state;updateListenerUI(s)}).catch(()=>updateListenerUI({state:'not_running'}))}
-function updateListenerUI(s){const d=document.getElementById('listener-dot'),m=document.getElementById('listener-msg');d.className='dot';switch(s.state){case'connected':d.classList.add('dot-live');m.textContent='🟢 Live — auto-tracking matches';break;case'connecting':d.classList.add('dot-connecting');m.textContent='🟡 Connecting to RL...';break;case'starting':d.classList.add('dot-connecting');m.textContent='🟡 Starting...';break;case'no_player':d.classList.add('dot-off');m.textContent='⚙️ Player name not set — open Settings';break;case'disconnected':d.classList.add('dot-off');m.textContent='⚫ RL not running (Stats API port 49123 closed)';break;default:d.classList.add('dot-off');m.textContent='Auto-tracker: '+(s.message||s.state||'unknown')}}
-
-// ====== Settings ======
-function toggleSettings(){const m=document.getElementById('settings-modal');if(m.style.display==='flex'){m.style.display='none';return}api('/api/config').then(c=>{document.getElementById('cfg-player-name').value=c.name||'';document.getElementById('cfg-friends').value=(c.friends||[]).join('\n')}).catch(()=>{});m.style.display='flex';checkRlConfig()}
-async function saveSettings(){const n=document.getElementById('cfg-player-name').value.trim(),fr=document.getElementById('cfg-friends').value.trim(),fs=fr?fr.split('\n').map(f=>f.trim()).filter(Boolean):[];try{await api('/api/config',{method:'POST',body:JSON.stringify({name:n,friends:fs})});showToast('✅ Settings saved! Listener will auto-detect...');toggleSettings();setTimeout(pollListenerStatus,3000)}catch(e){showToast('❌ '+e.message)}}
-async function checkRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Checking...';try{const s=await api('/api/rl-config');if(!s.config_dir_found){b.textContent='❌ Not Found';m.textContent='RL Config folder not found.'}else if(!s.ini_exists){b.textContent='⚠️ Missing';m.textContent='TAStatsAPI.ini not found. Click Auto-Create.'}else if(!s.ini_correct){b.textContent='⚠️ Wrong';m.textContent='PacketSendRate not 30. Click Auto-Create.'}else{b.textContent='✅ OK';m.textContent='TAStatsAPI.ini is correct!'}}catch(e){b.textContent='❌ Error';m.textContent=e.message}}
-async function createRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Creating...';try{const r=await api('/api/rl-config',{method:'POST'});if(r.created){b.textContent='✅ Created!';m.textContent='TAStatsAPI.ini created! Restart Rocket League.';showToast('✅ Restart RL!')}else{b.textContent='❌ Failed';m.textContent=r.message}}catch(e){b.textContent='❌ Error';m.textContent=e.message}}
-
-// ====== Exit ======
-async function exitTracker(){if(!confirm('Exit RL Tracker?'))return;try{await api('/api/quit',{method:'POST'})}catch(e){}showToast('👋 Tracker shut down.');setTimeout(()=>window.close(),500)}
+function renderCoachReport(rep){
+  if(rep.error)return`<p style="color:var(--red)">${rep.error}</p>`;
+  const gcol=gradeColor(rep.overall_grade);
+  let h=`<div style="margin-top:12px;padding:14px;border-radius:14px;background:rgba(8,8,18,.75);border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div><div class="grade-pill" style="background:${gcol}">COACH ${rep.overall_grade} · ${rep.overall_score||0}</div>
+      <p style="margin-top:8px;color:var(--soft);font-size:.88rem">${rep.summary||''}</p></div>
+      <div style="color:var(--muted);font-size:.8rem">${rep.wins||0}W-${rep.losses||0}L · ${rep.match_count||0} matches · ${(rep.mode||'').toUpperCase()}</div>
+    </div>`;
+  (rep.players||[]).forEach(p=>{
+    h+=`<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong>${p.role==='you'?'🧑':'👥'} ${p.name}</strong>
+        <span class="grade-pill" style="background:${gradeColor(p.grade)};font-size:.78rem">${p.grade} · ${p.score}</span>
+      </div>
+      ${p.limited_data?'<p style="color:var(--muted);font-size:.75rem;margin-bottom:8px">Limited teammate telemetry</p>':''}
+      <div class="cat-grid">${Object.entries(p.categories||{}).map(([k,v])=>`<div class="cat"><div class="n">${k}</div><div class="s">${v.score} <span class="${trendClass(v.trend)}">${trendIcon(v.trend)}</span></div><div style="font-size:.72rem;color:var(--muted);margin-top:4px">${v.note||''}</div></div>`).join('')}</div>
+      ${(p.tips||[]).map(t=>`<div class="tip ${t.severity||'info'}"><span>${t.icon||'💡'}</span><span>${t.text}</span></div>`).join('')}
+    </div>`;
+  });
+  (rep.session_tips||[]).forEach(t=>{h+=`<div class="tip ${t.severity||'info'}"><span>${t.icon||'💡'}</span><span>${t.text}</span></div>`});
+  h+='</div>';return h;
+}
+async function showCoachReport(sid, targetId){
+  const id=targetId||'session-coach-box';
+  let box=document.getElementById(id);
+  if(!box){const c=document.getElementById('active-content');if(c){const d=document.createElement('div');d.id=id;c.querySelector('.card')?.appendChild(d);box=d}}
+  if(!box)return;box.innerHTML='<div class="loading" style="padding:12px"><div class="spinner"></div></div>';
+  try{const rep=await api('/api/coach/session/'+sid+'/report');box.innerHTML=renderCoachReport(rep)}catch(e){box.innerHTML=`<p style="color:var(--red)">${e.message}</p>`}
+}
+async function shareSessionCard(sid){
+  showToast('✨ Rendering session card...');
+  try{
+    const r=await fetch('/api/sessions/'+sid+'/card.png');
+    if(!r.ok)throw new Error('Card failed');
+    const blob=await r.blob();const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=`rl-session-${sid}.png`;a.click();
+    // also open preview
+    window.open(url,'_blank');
+    showToast('✅ Session card ready — drop it in Discord!');
+  }catch(e){showToast('❌ '+e.message)}
+}
+async function downloadSessionCsv(sid){
+  try{
+    const r=await fetch('/api/sessions/'+sid+'/export.csv');if(!r.ok)throw new Error('CSV failed');
+    const blob=await r.blob();const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=`session-${sid}.csv`;a.click();
+    showToast('⬇️ CSV downloaded');
+  }catch(e){showToast('❌ '+e.message)}
+}
+async function toggleMatchDetail(mid,el){
+  const popup=el.querySelector('.match-detail-popup');
+  if(popup.classList.contains('show')){popup.classList.remove('show');popup.innerHTML='';return}
+  popup.classList.add('show');popup.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div></div>';
+  try{
+    const r=await api('/api/matches/'+mid);const d=r.details||{};const totalShots=d.shots||0;const userGoals=r.match.user_score||0;
+    const sa=totalShots?Math.min(Math.round(userGoals/Math.max(totalShots,1)*100),100):0;
+    let coachHtml='';
+    try{const cr=await api('/api/coach/match/'+mid);const ins=cr.insights||[];if(ins.length){coachHtml='<div class="deep-section"><h3>🏆 Coach</h3>'+ins.map(i=>`<div class="tip ${i.severity||'info'}"><span>${i.icon}</span><span>${i.text}</span></div>`).join('')+'</div>'}}catch(e){}
+    popup.innerHTML=coachHtml+`<div class="deep-section"><h3>🎯 Shot & Movement</h3><div class="deep-metrics">
+      <div class="metric-card orange"><div class="metric-value">${d.fastest_goal_kph>0?Number(d.fastest_goal_kph).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Fastest Goal</div></div>
+      <div class="metric-card blue"><div class="metric-value">${d.avg_shot_power>0?Number(d.avg_shot_power).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Avg Power</div></div>
+      <div class="metric-card green"><div class="metric-value">${sa}%</div><div class="metric-label">Accuracy</div></div>
+      <div class="metric-card"><div class="metric-value">${totalShots}</div><div class="metric-label">Shots</div></div>
+      <div class="metric-card blue"><div class="metric-value">${Number(d.boost_avg||0).toFixed(1)}%</div><div class="metric-label">Avg Boost</div></div>
+      <div class="metric-card"><div class="metric-value">${Number(d.air_time_pct||0).toFixed(1)}%</div><div class="metric-label">Air</div></div>
+      <div class="metric-card"><div class="metric-value">${Number(d.wall_time_pct||0).toFixed(1)}%</div><div class="metric-label">Wall</div></div>
+      <div class="metric-card green"><div class="metric-value">${d.demos_given||0}</div><div class="metric-label">Demos</div></div>
+      <div class="metric-card"><div class="metric-value">${d.saves||0}</div><div class="metric-label">Saves</div></div>
+    </div></div>`;
+  }catch(e){popup.innerHTML=`<p style="color:var(--red)">${e.message}</p>`}
+}
+function pollListenerStatus(){api('/api/listener-status').then(s=>updateListenerUI(s)).catch(()=>updateListenerUI({state:'not_running'}))}
+function updateListenerUI(s){const d=document.getElementById('listener-dot'),m=document.getElementById('listener-msg');d.className='dot';switch(s.state){case'connected':d.classList.add('dot-live');m.textContent='🟢 Live — auto-tracking matches';break;case'connecting':case'starting':d.classList.add('dot-connecting');m.textContent='🟡 Connecting...';break;case'no_player':d.classList.add('dot-off');m.textContent='⚙️ Player name not set — open Settings';break;case'disconnected':d.classList.add('dot-off');m.textContent='⚫ RL not running (port 49123 closed)';break;default:d.classList.add('dot-off');m.textContent='Auto-tracker: '+(s.message||s.state||'unknown')}}
+function toggleSettings(){const m=document.getElementById('settings-modal');if(m.style.display==='flex'){m.style.display='none';return}api('/api/config').then(c=>{document.getElementById('cfg-player-name').value=c.name||'';document.getElementById('cfg-friends').value=(c.friends||[]).join('\\n')}).catch(()=>{});m.style.display='flex';checkRlConfig()}
+async function saveSettings(){const n=document.getElementById('cfg-player-name').value.trim(),fr=document.getElementById('cfg-friends').value.trim(),fs=fr?fr.split('\n').map(f=>f.trim()).filter(Boolean):[];try{await api('/api/config',{method:'POST',body:JSON.stringify({name:n,friends:fs})});showToast('✅ Settings saved');toggleSettings();setTimeout(pollListenerStatus,2000)}catch(e){showToast('❌ '+e.message)}}
+async function checkRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Checking...';try{const s=await api('/api/rl-config');if(!s.config_dir_found){b.textContent='❌ Not Found';m.textContent='RL Config folder not found'}else if(!s.ini_exists){b.textContent='⚠️ Missing';m.textContent='TAStatsAPI.ini missing — Auto-Create'}else if(!s.ini_correct){b.textContent='⚠️ Wrong';m.textContent='INI incomplete — Auto-Create'}else{b.textContent='✅ OK';m.textContent=s.ini_read_by_rl?'INI OK (RL has read it)':'INI OK — restart RL if port closed'}}catch(e){b.textContent='❌';m.textContent=e.message}}
+async function createRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');try{const r=await api('/api/rl-config',{method:'POST'});if(r.created){b.textContent='✅ Created';m.textContent='Restart Rocket League fully';showToast('✅ Restart RL')}else{b.textContent='❌';m.textContent=r.message}}catch(e){b.textContent='❌';m.textContent=e.message}}
+async function exitTracker(){if(!confirm('Exit RL Tracker?'))return;try{await api('/api/quit',{method:'POST'})}catch(e){}showToast('👋 Shutting down');setTimeout(()=>window.close(),500)}
 async function checkForUpdates(){
-  const box=document.getElementById('update-results');
-  const badge=document.getElementById('update-badge-modal');
-  box.style.display='block';
-  box.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div>Checking GitHub for updates...</div>';
-  if(badge){badge.textContent='Checking...';badge.style.color='var(--text-muted)'}
-  let d;
-  try{d=await api('/api/check-update')}
-  catch(e){box.innerHTML='<p style="color:var(--red)">❌ Could not check: '+e.message+'</p>';if(badge){badge.textContent='❌ Error';badge.style.color='var(--red)'}return}
-  if(!d.ok){box.innerHTML='<p style="color:var(--red)">❌ '+d.error+'</p>';if(badge){badge.textContent='❌ Error';badge.style.color='var(--red)'}return}
-  renderUpdateResult(d);
+  const box=document.getElementById('update-results');const badge=document.getElementById('update-badge-modal');
+  box.style.display='block';box.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div></div>';
+  try{const d=await api('/api/check-update');renderUpdateResult(d)}catch(e){box.innerHTML='<p style="color:var(--red)">❌ '+e.message+'</p>'}
 }
 function renderUpdateResult(d){
-  const box=document.getElementById('update-results');
-  const badge=document.getElementById('update-badge-modal');
-  let html='<div style="font-weight:700;margin-bottom:8px;color:var(--text-primary)">🔄 Update Check</div>';
-  if(d.update_available){
-    if(badge){badge.textContent='⬆️ v'+d.latest+' available';badge.style.color='var(--orange)'}
-    html+='<div style="margin-bottom:8px;padding:10px;background:rgba(255,107,53,0.08);border:1px solid var(--orange);border-radius:6px">';
-    html+='<div style="font-weight:700;color:var(--orange)">⬆️ Update available!</div>';
-    html+='<div style="font-size:.74rem;color:var(--text-secondary);margin-top:4px">v'+d.current+' → <b>v'+d.latest+'</b></div>';
-    if(d.release_name){html+='<div style="font-size:.78rem;margin-top:6px;font-weight:600">'+d.release_name+'</div>'}
-    if(d.release_notes){html+='<div style="font-size:.72rem;color:var(--text-muted);margin-top:6px;white-space:pre-wrap;max-height:140px;overflow:auto;border-top:1px solid var(--border);padding-top:6px">'+d.release_notes.replace(/</g,'&lt;')+'</div>'}
-    if(d.published_at){html+='<div style="font-size:.68rem;color:var(--text-muted);margin-top:6px">Published '+d.published_at.split('T')[0]+'</div>'}
-    html+='<div style="display:flex;gap:6px;margin-top:10px"><a href="'+d.download_url+'" target="_blank" class="btn btn-primary" style="font-size:.72rem;text-decoration:none">⬇️ Download v'+d.latest+'</a><a href="'+(d.release_url||'#')+'" target="_blank" class="btn btn-ghost" style="font-size:.72rem;text-decoration:none">📄 Release page</a></div>';
-    html+='<button onclick="performUpdate()" class="btn" style="display:block;width:100%;margin-top:8px;font-size:.75rem;padding:10px 22px;background:linear-gradient(135deg,#f97316,#ef4444);color:white;border:none;font-weight:700;cursor:pointer">⚡ One-Click Update (auto-install + restart)</button>';
-    html+='<p style="font-size:.68rem;color:var(--text-muted);margin-top:6px">Downloads, installs, preserves your data, and restarts automatically.</p>';
-    html+='<div id="update-progress" style="display:none;margin-top:8px;padding:10px;background:rgba(249,115,22,0.1);border:1px solid var(--orange);border-radius:6px;font-size:.74rem"></div>';
-    html+='</div>';
-  }else{
-    if(badge){badge.textContent='✅ v'+d.latest+' latest';badge.style.color='var(--green)'}
-    html+='<div style="padding:10px;background:rgba(34,197,94,0.08);border:1px solid var(--green);border-radius:6px">';
-    html+='<div style="font-weight:700;color:var(--green)">✅ You\'re up to date!</div>';
-    html+='<div style="font-size:.74rem;color:var(--text-secondary);margin-top:4px">Running v'+d.current+' (latest release: v'+(d.latest||'?')+')</div>';
-    html+='</div>';
-  }
-  box.innerHTML=html;
+  const box=document.getElementById('update-results');const badge=document.getElementById('update-badge-modal');
+  if(!d.ok){box.innerHTML='<p style="color:var(--red)">❌ '+(d.error||'fail')+'</p>';return}
+  if(d.update_available){if(badge)badge.textContent='⬆️ v'+d.latest;box.innerHTML=`<div style="padding:10px;border:1px solid var(--orange);border-radius:10px;background:rgba(251,146,60,.08)"><b style="color:var(--orange)">Update available</b><div style="font-size:.75rem;margin-top:4px">v${d.current} → <b>v${d.latest}</b></div><button class="btn btn-share" style="margin-top:8px;width:100%" onclick="performUpdate()">⚡ One-Click Update</button><div id="update-progress" style="display:none;margin-top:8px"></div></div>`}
+  else{if(badge){badge.textContent='✅ latest';badge.style.color='var(--green)'}box.innerHTML=`<div style="padding:10px;border:1px solid var(--green);border-radius:10px;color:var(--green)">✅ Up to date (v${d.current})</div>`}
 }
-async function silentUpdateCheck(){
-  try{
-    const d=await api('/api/check-update');
-    if(d.ok&&d.update_available){
-      const b=document.getElementById('update-badge');
-      if(b){b.style.display='inline';b.textContent='● Update available (v'+d.latest+') — click to view'}
-    }
-  }catch(e){}
-}
-async function performUpdate(){
-  const prog=document.getElementById('update-progress');
-  if(!prog)return;
-  prog.style.display='block';
-  prog.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div class="spinner"></div><span>Downloading update...</span></div>';
-  try{
-    const r=await api('/api/update',{method:'POST'});
-    if(r.ok){
-      const extraMsg = r.source_update 
-        ? '<div style="font-size:.68rem;color:var(--text-muted);margin-top:4px">Files updated in place. Refresh the page to see changes.</div>'
-        : '<div style="font-size:.68rem;color:var(--text-muted);margin-top:4px">The tracker will restart in a moment...</div>';
-      prog.innerHTML='<div style="color:var(--green);font-weight:700">✅ '+r.message+'</div>'+extraMsg;
-      showToast('🔄 Updated to v'+r.new_version+'!');
-    }else{
-      prog.innerHTML='<div style="color:var(--red);font-weight:600">❌ Update failed</div><div style="font-size:.72rem;color:var(--text-secondary);margin-top:4px">'+r.error+'</div>';
-    }
-  }catch(e){
-    if(e.message.includes('not reachable')||e.message.includes('Failed to fetch')){
-      prog.innerHTML='<div style="color:var(--green);font-weight:700">✅ Update launched!</div><div style="font-size:.68rem;color:var(--text-muted);margin-top:4px">Tracker is restarting with new version. You can close this window.</div>';
-      showToast('🔄 Tracker is restarting...');
-    }else{
-      prog.innerHTML='<div style="color:var(--red);font-weight:600">❌ Update failed</div><div style="font-size:.72rem;color:var(--text-secondary);margin-top:4px">'+e.message+'</div>';
-    }
-  }
-}
-
+async function silentUpdateCheck(){try{const d=await api('/api/check-update');if(d.ok&&d.update_available){const b=document.getElementById('update-badge');if(b){b.style.display='inline';b.textContent='● Update available (v'+d.latest+')'}}}catch(e){}}
+async function performUpdate(){const prog=document.getElementById('update-progress');if(!prog)return;prog.style.display='block';prog.innerHTML='Downloading...';try{const r=await api('/api/update',{method:'POST'});prog.innerHTML=r.ok?('✅ '+r.message):('❌ '+(r.error||'fail'));if(r.ok)showToast('🔄 Updated to v'+r.new_version)}catch(e){if((e.message||'').includes('not reachable')){prog.innerHTML='✅ Restarting...';showToast('🔄 Restarting')}else prog.innerHTML='❌ '+e.message}}
 document.getElementById('settings-modal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('settings-modal').style.display='none'});
-loadActiveSession();listenerPollInterval=setInterval(pollListenerStatus,10000);pollListenerStatus();silentUpdateCheck();
-(async function firstRunCheck(){try{const c=await api('/api/config');if(!c.name)setTimeout(()=>{toggleSettings();showToast('👋 Welcome! Enter your RL nickname.')},1500)}catch(e){setTimeout(()=>showToast('⚠️ Could not connect to server.'),2000)}})();
+loadActiveSession();setInterval(pollListenerStatus,10000);pollListenerStatus();silentUpdateCheck();
+(async()=>{try{const c=await api('/api/config');if(!c.name)setTimeout(()=>{toggleSettings();showToast('👋 Welcome! Enter your RL nickname.')},1200)}catch(e){}})();
 </script>
-</body></html>
+</body>
+</html>

@@ -5,7 +5,7 @@ import json, sqlite3, os as _os, sys, io, threading as _th
 from datetime import datetime, timezone
 from pathlib import Path
 import yaml
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response
 from coach import CoachEngine
 
 # DB persistence: store next to exe
@@ -17,7 +17,7 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data-v2.db"
 
 # v1.1: Auto-update check against GitHub releases.
-APP_VERSION = "2.0.16"
+APP_VERSION = "3.0.0"
 GITHUB_REPO = "magnificolv/RocketTracker"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -51,17 +51,53 @@ def get_db():
     conn.execute("PRAGMA journal_mode=WAL"); conn.execute("PRAGMA synchronous=OFF"); conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
+def _migrate_columns(conn):
+    """Additive v3.0 columns — safe on existing DBs."""
+    wanted = {
+        "matches": [
+            ("playlist", "TEXT"),
+            ("friend_name", "TEXT"),
+        ],
+        "match_details": [
+            ("playlist", "TEXT"),
+            ("teammate_name", "TEXT"),
+            ("teammate_shots", "INTEGER DEFAULT 0"),
+            ("teammate_saves", "INTEGER DEFAULT 0"),
+            ("teammate_assists", "INTEGER DEFAULT 0"),
+            ("teammate_touches", "INTEGER DEFAULT 0"),
+            ("teammate_demos", "INTEGER DEFAULT 0"),
+        ],
+        "matches_summary": [
+            ("playlist", "TEXT"),
+            ("friend_name", "TEXT"),
+        ],
+    }
+    for table, cols in wanted.items():
+        existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        for name, decl in cols:
+            if name not in existing:
+                try:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                except Exception:
+                    pass
+
 def init_db():
     conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS sessions(id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL, ended_at TEXT, status TEXT NOT NULL DEFAULT 'active', mode TEXT NOT NULL DEFAULT 'solo', friend_name TEXT, notes TEXT);
-        CREATE TABLE IF NOT EXISTS matches(id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, played_at TEXT NOT NULL, user_score INTEGER NOT NULL, opponent_score INTEGER NOT NULL, result TEXT NOT NULL, mode TEXT NOT NULL DEFAULT 'solo', FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE);
-        CREATE TABLE IF NOT EXISTS match_details(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER UNIQUE NOT NULL, arena TEXT, overtime INTEGER DEFAULT 0, touches INTEGER DEFAULT 0, car_touches INTEGER DEFAULT 0, shots INTEGER DEFAULT 0, saves INTEGER DEFAULT 0, assists INTEGER DEFAULT 0, demos_given INTEGER DEFAULT 0, demos_taken INTEGER DEFAULT 0, boost_avg REAL DEFAULT 0, boost_time_pct REAL DEFAULT 0, supersonic_time_pct REAL DEFAULT 0, ground_time_pct REAL DEFAULT 0, air_time_pct REAL DEFAULT 0, wall_time_pct REAL DEFAULT 0, fastest_goal_kph REAL DEFAULT 0, avg_shot_power REAL DEFAULT 0, time_remaining_sec INTEGER, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS matches(id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL, played_at TEXT NOT NULL, user_score INTEGER NOT NULL, opponent_score INTEGER NOT NULL, result TEXT NOT NULL, mode TEXT NOT NULL DEFAULT 'solo', playlist TEXT, friend_name TEXT, FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS match_details(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER UNIQUE NOT NULL, arena TEXT, overtime INTEGER DEFAULT 0, touches INTEGER DEFAULT 0, car_touches INTEGER DEFAULT 0, shots INTEGER DEFAULT 0, saves INTEGER DEFAULT 0, assists INTEGER DEFAULT 0, demos_given INTEGER DEFAULT 0, demos_taken INTEGER DEFAULT 0, boost_avg REAL DEFAULT 0, boost_time_pct REAL DEFAULT 0, supersonic_time_pct REAL DEFAULT 0, ground_time_pct REAL DEFAULT 0, air_time_pct REAL DEFAULT 0, wall_time_pct REAL DEFAULT 0, fastest_goal_kph REAL DEFAULT 0, avg_shot_power REAL DEFAULT 0, time_remaining_sec INTEGER, playlist TEXT, teammate_name TEXT, teammate_shots INTEGER DEFAULT 0, teammate_saves INTEGER DEFAULT 0, teammate_assists INTEGER DEFAULT 0, teammate_touches INTEGER DEFAULT 0, teammate_demos INTEGER DEFAULT 0, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
         CREATE TABLE IF NOT EXISTS goals(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER NOT NULL, scored_at TEXT NOT NULL, scorer TEXT NOT NULL, assister TEXT, team_num INTEGER NOT NULL, speed_kph REAL, time_remaining_sec INTEGER, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
         CREATE TABLE IF NOT EXISTS ball_hits(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER NOT NULL, hit_at TEXT NOT NULL, player TEXT NOT NULL, player_team INTEGER NOT NULL, pre_hit_speed REAL, post_hit_speed REAL, post_hit_kph REAL, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
-        CREATE TABLE IF NOT EXISTS matches_summary(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER UNIQUE, session_id INTEGER, played_at TEXT, user_score INTEGER, opponent_score INTEGER, result TEXT, mode TEXT, arena TEXT, highlight_icon TEXT, highlight_text TEXT, highlight_value REAL, goals INTEGER, shots INTEGER, saves INTEGER, demos_given INTEGER, demos_taken INTEGER, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS matches_summary(id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER UNIQUE, session_id INTEGER, played_at TEXT, user_score INTEGER, opponent_score INTEGER, result TEXT, mode TEXT, arena TEXT, highlight_icon TEXT, highlight_text TEXT, highlight_value REAL, goals INTEGER, shots INTEGER, saves INTEGER, demos_given INTEGER, demos_taken INTEGER, playlist TEXT, friend_name TEXT, FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE);
         CREATE INDEX IF NOT EXISTS idx_summary_played ON matches_summary(played_at DESC);
     """)
+    _migrate_columns(conn)
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_playlist ON matches(playlist)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_mode ON matches(mode)")
+    except Exception:
+        pass
     conn.commit(); conn.close()
 
 @app.route("/")
@@ -212,16 +248,27 @@ def match_summaries():
 
 @app.route("/api/stats")
 def stats():
+    mode = (request.args.get("mode") or "").strip().lower()
+    playlist = (request.args.get("playlist") or "").strip()
+    where = []
+    params = []
+    if mode in ("solo", "duo"):
+        where.append("mode=?"); params.append(mode)
+    if playlist and playlist.lower() not in ("all", "*"):
+        where.append("COALESCE(playlist,'Unknown')=?"); params.append(playlist)
+    wh = (" WHERE " + " AND ".join(where)) if where else ""
     conn = get_db()
-    o = dict(conn.execute("SELECT COUNT(*) as total, SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses FROM matches").fetchone())
+    o = dict(conn.execute(f"SELECT COUNT(*) as total, SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses FROM matches{wh}", params).fetchone())
+    # solo/duo blocks ignore mode filter so cards still make sense when filtering playlist only
     s = dict(conn.execute("SELECT COUNT(*) as total, SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses FROM matches WHERE mode='solo'").fetchone())
     d = dict(conn.execute("SELECT COUNT(*) as total, SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses FROM matches WHERE mode='duo'").fetchone())
-    rec = conn.execute("SELECT result, user_score, opponent_score, mode, played_at FROM matches ORDER BY played_at DESC LIMIT 20").fetchall()
+    rec = conn.execute(f"SELECT result, user_score, opponent_score, mode, played_at, playlist FROM matches{wh} ORDER BY played_at DESC LIMIT 20", params).fetchall()
     rec_solo = conn.execute("SELECT result FROM matches WHERE mode='solo' ORDER BY played_at DESC LIMIT 20").fetchall()
     rec_duo = conn.execute("SELECT result FROM matches WHERE mode='duo' ORDER BY played_at DESC LIMIT 20").fetchall()
     sc = conn.execute("SELECT COUNT(*) as total FROM sessions").fetchone()["total"]; cc = conn.execute("SELECT COUNT(*) as total FROM sessions WHERE status='completed'").fetchone()["total"]
     conn.close()
-    return jsonify({"overall": o, "solo": s, "duo": d, "recent": [dict(r) for r in rec], "recent_solo": [r["result"] for r in rec_solo], "recent_duo": [r["result"] for r in rec_duo], "sessions": {"total": sc, "completed": cc}, "duo_by_friend": []})
+    return jsonify({"overall": o, "solo": s, "duo": d, "recent": [dict(r) for r in rec], "recent_solo": [r["result"] for r in rec_solo], "recent_duo": [r["result"] for r in rec_duo], "sessions": {"total": sc, "completed": cc}, "duo_by_friend": [], "filters": {"mode": mode or "all", "playlist": playlist or "all"}})
+
 
 @app.route("/api/listener-status")
 def listener_status():
@@ -459,37 +506,53 @@ def rl_config_create():
 
 @app.route("/api/stats/deep")
 def deep_stats():
+    mode = (request.args.get("mode") or "").strip().lower()
+    playlist = (request.args.get("playlist") or "").strip()
+    joins = "FROM match_details md JOIN matches m ON m.id = md.match_id"
+    where = []
+    params = []
+    if mode in ("solo", "duo"):
+        where.append("m.mode=?"); params.append(mode)
+    if playlist and playlist.lower() not in ("all", "*"):
+        where.append("COALESCE(m.playlist, md.playlist, 'Unknown')=?"); params.append(playlist)
+    wh = (" WHERE " + " AND ".join(where)) if where else ""
     conn = get_db()
-    md = conn.execute("""
+    md = conn.execute(f"""
         SELECT
             COUNT(*) as total_matches,
-            SUM(touches) as total_touches,
-            SUM(car_touches) as total_car_touches,
-            SUM(shots) as total_shots,
-            SUM(saves) as total_saves,
-            SUM(assists) as total_assists,
-            SUM(demos_given) as total_demos_given,
-            SUM(demos_taken) as total_demos_taken,
-            SUM(overtime) as total_overtime,
-            ROUND(AVG(boost_avg), 1) as avg_boost,
-            ROUND(AVG(boost_time_pct), 1) as avg_boost_time,
-            ROUND(AVG(supersonic_time_pct), 1) as avg_supersonic_time,
-            ROUND(AVG(air_time_pct), 1) as avg_air_time,
-            ROUND(AVG(ground_time_pct), 1) as avg_ground_time,
-            ROUND(AVG(wall_time_pct), 1) as avg_wall_time,
-            ROUND(MAX(fastest_goal_kph), 1) as all_time_fastest_goal,
-            ROUND(AVG(avg_shot_power), 1) as overall_avg_shot_power
-        FROM match_details
-    """).fetchone()
-    total_goals = conn.execute("SELECT COUNT(*) as cnt FROM goals").fetchone()["cnt"]
-    total_user_goals = conn.execute("SELECT SUM(user_score) FROM matches").fetchone()[0] or 0
+            SUM(md.touches) as total_touches,
+            SUM(md.car_touches) as total_car_touches,
+            SUM(md.shots) as total_shots,
+            SUM(md.saves) as total_saves,
+            SUM(md.assists) as total_assists,
+            SUM(md.demos_given) as total_demos_given,
+            SUM(md.demos_taken) as total_demos_taken,
+            SUM(md.overtime) as total_overtime,
+            ROUND(AVG(md.boost_avg), 1) as avg_boost,
+            ROUND(AVG(md.boost_time_pct), 1) as avg_boost_time,
+            ROUND(AVG(md.supersonic_time_pct), 1) as avg_supersonic_time,
+            ROUND(AVG(md.air_time_pct), 1) as avg_air_time,
+            ROUND(AVG(md.ground_time_pct), 1) as avg_ground_time,
+            ROUND(AVG(md.wall_time_pct), 1) as avg_wall_time,
+            ROUND(MAX(md.fastest_goal_kph), 1) as all_time_fastest_goal,
+            ROUND(AVG(md.avg_shot_power), 1) as overall_avg_shot_power
+        {joins}{wh}
+    """, params).fetchone()
+    # user goals from matches under same filter
+    mw = []
+    mp = []
+    if mode in ("solo", "duo"):
+        mw.append("mode=?"); mp.append(mode)
+    if playlist and playlist.lower() not in ("all", "*"):
+        mw.append("COALESCE(playlist,'Unknown')=?"); mp.append(playlist)
+    mwh = (" WHERE " + " AND ".join(mw)) if mw else ""
+    total_user_goals = conn.execute(f"SELECT SUM(user_score) FROM matches{mwh}", mp).fetchone()[0] or 0
     conn.close()
-
     a = dict(md) if md else {}
-    a["total_goals"] = total_user_goals  # Only user's goals, not all match goals
-    # Shot accuracy = user goals / user shots * 100
+    a["total_goals"] = total_user_goals
     a["shot_accuracy"] = min(round(total_user_goals / max(a.get("total_shots") or 1, 1) * 100, 1), 100.0) if total_user_goals > 0 else 0
-    return jsonify({"aggregates": {k: (v or 0) for k, v in a.items()}})
+    return jsonify({"aggregates": {k: (v or 0) for k, v in a.items()}, "filters": {"mode": mode or "all", "playlist": playlist or "all"}})
+
 
 @app.route("/api/quit", methods=["POST"])
 def quit_tracker():
@@ -518,3 +581,94 @@ def coach_session(session_id):
 @app.route("/api/coach/records")
 def coach_records():
     return jsonify(coach.get_all_records())
+
+
+@app.route("/api/stats/playlists")
+def stats_playlists():
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT COALESCE(NULLIF(playlist,''), 'Unknown') as playlist, COUNT(*) as total, "
+        "SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, "
+        "SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses "
+        "FROM matches GROUP BY COALESCE(NULLIF(playlist,''), 'Unknown') ORDER BY total DESC"
+    ).fetchall()
+    conn.close()
+    return jsonify({"playlists": [dict(r) for r in rows]})
+
+@app.route("/api/coach/session/<int:session_id>/report")
+def coach_session_report(session_id):
+    cfg = load_config()
+    pname = (cfg.get("player") or {}).get("name") or "You"
+    return jsonify(coach.session_report(session_id, player_name=pname))
+
+@app.route("/api/sessions/<int:sid>/export.csv")
+def session_export_csv(sid):
+    from session_card import session_to_csv_rows
+    conn = get_db()
+    s = conn.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    if not s:
+        conn.close(); return jsonify({"error": "Not found"}), 404
+    rows = conn.execute(
+        """SELECT m.id as match_id, m.played_at, m.result, m.user_score, m.opponent_score, m.mode,
+                  COALESCE(sm.goals, m.user_score, 0) as goals,
+                  COALESCE(sm.shots, md.shots, 0) as shots,
+                  COALESCE(sm.saves, md.saves, 0) as saves,
+                  COALESCE(sm.demos_given, md.demos_given, 0) as demos_given,
+                  COALESCE(sm.demos_taken, md.demos_taken, 0) as demos_taken,
+                  COALESCE(m.playlist, md.playlist, sm.playlist, 'Unknown') as playlist,
+                  COALESCE(md.arena, sm.arena) as arena
+           FROM matches m
+           LEFT JOIN match_details md ON md.match_id=m.id
+           LEFT JOIN matches_summary sm ON sm.match_id=m.id
+           WHERE m.session_id=? ORDER BY m.played_at ASC""",
+        (sid,),
+    ).fetchall()
+    conn.close()
+    csv_text = session_to_csv_rows([dict(r) for r in rows])
+    return Response(
+        csv_text,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=session-{sid}.csv"},
+    )
+
+@app.route("/api/sessions/<int:sid>/card.png")
+def session_card_png(sid):
+    from session_card import render_session_card
+    conn = get_db()
+    s = conn.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
+    if not s:
+        conn.close(); return jsonify({"error": "Not found"}), 404
+    rows = conn.execute(
+        """SELECT m.*, COALESCE(sm.goals, m.user_score, 0) as goals,
+                  COALESCE(sm.shots, md.shots, 0) as shots,
+                  COALESCE(sm.saves, md.saves, 0) as saves,
+                  COALESCE(sm.demos_given, md.demos_given, 0) as demos_given,
+                  COALESCE(sm.demos_taken, md.demos_taken, 0) as demos_taken,
+                  COALESCE(m.playlist, md.playlist, sm.playlist, 'Unknown') as playlist
+           FROM matches m
+           LEFT JOIN match_details md ON md.match_id=m.id
+           LEFT JOIN matches_summary sm ON sm.match_id=m.id
+           WHERE m.session_id=? ORDER BY m.played_at ASC""",
+        (sid,),
+    ).fetchall()
+    conn.close()
+    cfg = load_config()
+    pname = (cfg.get("player") or {}).get("name") or "Player"
+    try:
+        report = coach.session_report(sid, player_name=pname)
+    except Exception:
+        report = {}
+    logo = BASE_DIR / "dashboard" / "logo.png"
+    try:
+        png = render_session_card(dict(s), [dict(r) for r in rows], coach=report, logo_path=logo, player_name=pname)
+    except Exception as e:
+        return jsonify({"error": f"Card render failed: {e}"}), 500
+    # optional cache on disk
+    try:
+        exp = BASE_DIR / "exports"
+        exp.mkdir(exist_ok=True)
+        (exp / f"session-{sid}.png").write_bytes(png)
+    except Exception:
+        pass
+    return Response(png, mimetype="image/png", headers={"Content-Disposition": f"inline; filename=session-{sid}.png"})
+
