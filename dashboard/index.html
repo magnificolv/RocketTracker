@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RL Tracker 3.0.1 · Starlight</title>
+<title>RL Tracker 3.0.2 · Starlight</title>
 <style>
 
 :root{
@@ -191,6 +191,32 @@ body{
   .match-row{grid-template-columns:1fr}
 }
 
+/* ===== Starlight icon system ===== */
+.ico{width:16px;height:16px;display:inline-block;vertical-align:-3px}
+.ico svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.metric-ico .ico{width:22px;height:22px;opacity:.95;filter:drop-shadow(0 0 10px rgba(167,139,250,.35))}
+.metric-ico{display:flex;justify-content:center;margin-bottom:8px}
+.wl-row{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
+.wl-pill{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:999px;font-weight:800;font-size:.95rem;border:1px solid transparent}
+.wl-pill.w{background:rgba(74,222,128,.12);border-color:rgba(74,222,128,.35);color:var(--green)}
+.wl-pill.l{background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.3);color:var(--red)}
+.wl-pill.r{background:rgba(34,211,238,.1);border-color:rgba(34,211,238,.28);color:var(--cyan)}
+.wl-pill .n{font-size:1.15rem;letter-spacing:-.02em}
+.stat-pill{gap:6px}
+.stat-pill .ico{width:13px;height:13px;opacity:.9}
+.tag{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:.7rem;font-weight:700;border:1px solid var(--border2);background:rgba(255,255,255,.04);color:var(--soft)}
+.tag.live{color:var(--green);border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.1)}
+.tag.solo,.tag.duo{color:var(--violet);border-color:rgba(167,139,250,.3);background:rgba(167,139,250,.1)}
+.btn .ico{width:15px;height:15px}
+.older-wrap{display:flex;justify-content:center;margin-top:16px}
+.btn-older{padding:12px 22px;border-radius:999px;border:1px solid rgba(167,139,250,.35);background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(167,139,250,.18));color:#e9e7ff;font-weight:800;font-size:.84rem;cursor:pointer;display:inline-flex;align-items:center;gap:8px;box-shadow:0 8px 24px rgba(99,102,241,.15)}
+.btn-older:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(167,139,250,.25)}
+.session-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.session-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.hi-line{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.hi-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:12px;background:rgba(8,8,18,.75);border:1px solid rgba(99,102,241,.18);font-size:.78rem;color:var(--soft)}
+.hi-chip b{color:var(--text)}
+
 </style>
 </head>
 <body>
@@ -205,7 +231,7 @@ body{
   <img src="logo.png" class="header-logo" alt="RL Tracker">
   <h1>Rocket League <span class="accent">Tracker</span></h1>
   <p class="subtitle">Starlight edition · track the grind, share the session</p>
-  <p class="version">RL Tracker 3.0.1 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
+  <p class="version">RL Tracker 3.0.2 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
 </div>
 <nav class="nav">
   <button class="nav-btn active" data-tab="active-session"><span class="ni"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M14 10h4M14 14h4"/></svg></span>Session</button>
@@ -228,33 +254,122 @@ body{
   <button class="settings-toggle" onclick="toggleSettings()" title="Settings">⚙️</button>
 </div>
 <div class="modal-overlay" id="settings-modal" style="display:none"><div class="modal">
-  <h3 style="margin-bottom:14px">⚙️ Settings</h3>
+  <h3 style="margin-bottom:14px">Settings</h3>
   <label style="display:block;color:var(--soft);font-size:.8rem;margin-bottom:4px">Your Rocket League Name</label>
   <input class="input" id="cfg-player-name" placeholder="e.g. Magnifico" style="margin-bottom:12px">
   <label style="display:block;color:var(--soft);font-size:.8rem;margin-bottom:4px">Friend Names (one per line)</label>
   <textarea class="input" id="cfg-friends" rows="3" style="margin-bottom:12px;resize:vertical"></textarea>
   <div style="background:rgba(8,8,18,.8);border-radius:12px;padding:12px;margin-bottom:12px;border:1px solid var(--border2)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:700;font-size:.82rem">🔧 RL Stats API</span><span id="rl-config-badge" style="font-size:.7rem">Checking...</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:700;font-size:.82rem">RL Stats API</span><span id="rl-config-badge" style="font-size:.7rem">Checking...</span></div>
     <p id="rl-config-msg" style="font-size:.72rem;color:var(--muted);margin-bottom:8px"></p>
-    <div style="display:flex;gap:6px"><button class="btn btn-ghost" onclick="checkRlConfig()">🔄 Check</button><button class="btn btn-primary" onclick="createRlConfig()">📝 Auto-Create</button></div>
+    <div style="display:flex;gap:6px"><button class="btn btn-ghost" onclick="checkRlConfig()">Check</button><button class="btn btn-primary" onclick="createRlConfig()">Auto-Create</button></div>
   </div>
   <div style="background:rgba(8,8,18,.8);border-radius:12px;padding:12px;margin-bottom:14px;border:1px solid var(--border2)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:700;font-size:.82rem">🔄 Auto-Update</span><span id="update-badge-modal" style="font-size:.7rem">Not checked</span></div>
-    <button class="btn btn-ghost" onclick="checkForUpdates()">🔄 Check for Updates</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:700;font-size:.82rem">Auto-Update</span><span id="update-badge-modal" style="font-size:.7rem">Not checked</span></div>
+    <button class="btn btn-ghost" onclick="checkForUpdates()">Check for Updates</button>
     <div id="update-results" style="display:none;margin-top:10px;font-size:.78rem"></div>
   </div>
-  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" onclick="toggleSettings()">Cancel</button><button class="btn btn-primary" onclick="saveSettings()">💾 Save</button></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" onclick="toggleSettings()">Cancel</button><button class="btn btn-primary" onclick="saveSettings()">Save</button></div>
 </div></div>
 <script>
-let activeSessionId=null,activeSession=null,statsMode='all',statsPlaylist='all',playlistsCache=[];
-async function api(url,opts={}){const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});let d={};try{d=await r.json()}catch(e){} if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d}
+let activeSessionId=null,activeSession=null,statsMode='all',statsPlaylist='all',playlistsCache=[],olderMatchesOffset=0;
+
+/* ---- SVG icons (Starlight) ---- */
+const ICO = {
+  win: '<svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 4a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3M17 4a3 3 0 0 1 3 3v1a3 3 0 0 1-3 3"/></svg>',
+  loss: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>',
+  goal: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5 7.5c2.5 1.5 5 2 7 2s4.5-.5 7-2M5 16.5c2.5-1.5 5-2 7-2s4.5.5 7 2"/></svg>',
+  shot: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+  save: '<svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7l8-4z"/></svg>',
+  demo: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 10-14h-7l0-6z"/></svg>',
+  boost: '<svg viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 9-12h-6l0-6z"/></svg>',
+  air: '<svg viewBox="0 0 24 24"><path d="M4 16c3-6 6-9 8-9s5 3 8 9"/><path d="M4 19h16"/><path d="M9 10l1.5-4h3L15 10"/></svg>',
+  wall: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 10h16M4 16h16M10 4v16M16 4v16"/></svg>',
+  ground: '<svg viewBox="0 0 24 24"><path d="M3 17h18"/><path d="M5 17l3-8h8l3 8"/><path d="M9 17v3M15 17v3"/></svg>',
+  super: '<svg viewBox="0 0 24 24"><path d="M13 2L3 14h8l-1 8 11-14h-8l0-6z"/></svg>',
+  touch: '<svg viewBox="0 0 24 24"><path d="M8 13V6a2 2 0 1 1 4 0v5"/><path d="M12 11V5a2 2 0 1 1 4 0v7"/><path d="M16 12V8a2 2 0 1 1 4 0v8a6 6 0 0 1-6 6h-2c-3 0-5-1.5-6.5-4L4 15"/></svg>',
+  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  share: '<svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.5 13.5l7 4M15.5 6.5l-7 4"/></svg>',
+  coach: '<svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
+  older: '<svg viewBox="0 0 24 24"><path d="M4 6h12v14H4z"/><path d="M8 10h4M8 14h6"/><path d="M16 8h4v12h-4"/></svg>',
+  end: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
+  user: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4-6 8-6s6.5 2 8 6"/></svg>',
+  users: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 19c1-3.5 3-5 6.5-5s5.5 1.5 6.5 5M14 19c.5-2 1.8-3 4-3 1.5 0 2.7.6 3.5 2"/></svg>',
+  rocket: '<svg viewBox="0 0 24 24"><path d="M5 19l4-1 9-9a3 3 0 0 0-4-4l-9 9-1 4z"/><path d="M14 6l4 4"/><path d="M5 19l-2 2"/><path d="M9 15a3 3 0 0 0 4 4"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 10-14h-7l0-6z"/></svg>',
+  playlist: '<svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+};
+
+function ic(name, cls='ico'){return `<span class="${cls}">${ICO[name]||ICO.bolt}</span>`}
+function n1(v){return Number(v||0)}
+function fmtKph(v){v=n1(v);return v>0?v.toFixed(1)+' km/h':'—'}
+function fmtPct(v){return n1(v).toFixed(1).replace(/\.0$/,'')+'%'}
+
+async function api(url,opts={}){
+  const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});
+  let d={}; try{d=await r.json()}catch(e){}
+  if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+  return d;
+}
 function showToast(m){const e=document.createElement('div');e.className='toast';e.textContent=m;document.getElementById('toast-container').appendChild(e);setTimeout(()=>e.remove(),3200)}
 function formatDate(iso){try{return new Date(iso).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return iso}}
 function relativeTime(iso){const d=new Date(iso),n=new Date(),diff=Math.floor((n-d)/1000);if(diff<60)return'just now';if(diff<3600)return Math.floor(diff/60)+'m ago';if(diff<86400)return Math.floor(diff/3600)+'h ago';return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
-function matchBadges(s){return`<span class="stat-pill g">⚽ <b>${s.goals||0}</b></span><span class="stat-pill b">🎯 <b>${s.shots||0}</b></span><span class="stat-pill o">🛡️ <b>${s.saves||0}</b></span><span class="stat-pill r">💥 <b>${s.demos_given||0}</b></span>`}
 function gradeColor(g){g=(g||'').toUpperCase();if(g.startsWith('A'))return'var(--green)';if(g.startsWith('B'))return'var(--cyan)';if(g.startsWith('C'))return'var(--orange)';return'var(--red)'}
 function trendIcon(t){return t==='up'?'↑':t==='down'?'↓':'→'}
 function trendClass(t){return t==='up'?'trend-up':t==='down'?'trend-down':'trend-flat'}
+
+function matchBadges(s){
+  return [
+    `<span class="stat-pill g">${ic('goal')} <b>${s.goals||0}</b></span>`,
+    `<span class="stat-pill b">${ic('shot')} <b>${s.shots||0}</b></span>`,
+    `<span class="stat-pill o">${ic('save')} <b>${s.saves||0}</b></span>`,
+    `<span class="stat-pill r">${ic('demo')} <b>${s.demos_given||0}</b></span>`,
+  ].join('');
+}
+function wlPills(w,l,t){
+  const wr=t?Math.round(w/t*100):0;
+  return `<div class="wl-row">
+    <span class="wl-pill w">${ic('win')}<span class="n">${w}</span> W</span>
+    <span class="wl-pill l">${ic('loss')}<span class="n">${l}</span> L</span>
+    <span class="wl-pill r"><span class="n">${wr}%</span> WR</span>
+  </div>`;
+}
+function mv(name,val,label,cls=''){
+  return `<div class="metric-card ${cls}"><div class="metric-ico">${ic(name)}</div><div class="metric-value">${val}</div><div class="metric-label">${label}</div></div>`;
+}
+/** Full deep stats — same structure as Stats tab */
+function renderDeepBlocks(a){
+  const fg=a.all_time_fastest_goal||a.fastest_goal_kph||0;
+  const asp=a.overall_avg_shot_power||a.avg_shot_power||0;
+  const sa=a.shot_accuracy!=null?a.shot_accuracy:0;
+  return `
+  <div class="deep-section"><h3>Shot Power & Accuracy</h3><div class="deep-metrics">
+    ${mv('rocket', fg>0?fmtKph(fg):'—','Fastest Goal',fg>0?'orange':'muted')}
+    ${mv('demo', asp>0?fmtKph(asp):'—','Avg Shot Power',asp>0?'blue':'muted')}
+    ${mv('shot', n1(sa)+'%','Accuracy','green')}
+    ${mv('shot', a.total_shots||0,'Total Shots','blue')}
+  </div></div>
+  <div class="deep-section"><h3>Movement & Boost</h3><div class="deep-metrics">
+    ${mv('boost', fmtPct(a.avg_boost),'Avg Boost','blue')}
+    ${mv('boost', fmtPct(a.avg_boost_time),'Boosting','')}
+    ${mv('super', fmtPct(a.avg_supersonic_time),'Supersonic','orange')}
+    ${mv('air', fmtPct(a.avg_air_time),'Air','')}
+    ${mv('ground', fmtPct(a.avg_ground_time),'Ground','')}
+    ${mv('wall', fmtPct(a.avg_wall_time),'Wall',n1(a.avg_wall_time)>0?'blue':'muted')}
+  </div></div>
+  <div class="deep-section"><h3>Combat & Ball</h3><div class="deep-metrics">
+    ${mv('demo', a.total_demos_given||a.demos_given||0,'Demos Given','green')}
+    ${mv('loss', a.total_demos_taken||a.demos_taken||0,'Demos Taken','red')}
+    ${mv('save', a.total_saves||a.saves||0,'Saves','')}
+    ${mv('clock', a.total_overtime||a.overtime||0,'Overtimes','')}
+    ${mv('touch', a.total_touches||a.touches||0,'Touches','')}
+    ${mv('touch', a.total_car_touches||a.car_touches||0,'Car Touches','')}
+    ${mv('users', a.total_assists||a.assists||0,'Assists','')}
+    ${mv('goal', a.total_goals||0,'Goals','green')}
+  </div></div>`;
+}
 
 document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');
@@ -278,58 +393,69 @@ async function loadActiveSession(){
 function renderActiveSession(s){
   const ms=s.matches||[],w=s.wins||0,l=s.losses||0,t=w+l;
   let h=`<div class="card ${t>0?(w>=l?'win-card':'loss-card'):''}">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-      <div><h3 style="font-size:1.15rem">🎮 Active Session</h3>
-      <span style="color:var(--muted);font-size:.8rem">${formatDate(s.started_at)} · ${s.mode}${s.friend_name?' w/ '+s.friend_name:''}</span></div>
-      <button class="btn btn-danger" onclick="endSession()">End Session</button></div>`;
+    <div class="session-head">
+      <div><h3 style="font-size:1.15rem">Active Session</h3>
+      <span style="color:var(--muted);font-size:.8rem">${formatDate(s.started_at)}</span>
+      <div class="session-meta">
+        <span class="tag ${s.mode==='duo'?'duo':'solo'}">${ic(s.mode==='duo'?'users':'user')} ${s.mode==='duo'?('Duo'+(s.friend_name?' · '+s.friend_name:'')):'Solo'}</span>
+        <span class="tag live">Live</span>
+      </div></div>
+      <button class="btn btn-danger" onclick="endSession()">${ic('end')} End Session</button>
+    </div>`;
   if(t>0){
-    h+=`<div style="text-align:center;margin:14px 0"><span style="color:var(--green);font-size:1.5rem;font-weight:800">🏆 ${w}W</span>
-      <span style="color:var(--muted);margin:0 8px">·</span><span style="color:var(--red);font-size:1.5rem;font-weight:800">💀 ${l}L</span>
-      <span style="color:var(--muted);margin:0 8px">·</span><span style="font-weight:800">${Math.round(w/t*100)}%</span></div>
-      <div class="actions" style="justify-content:center">
-        <button class="btn btn-share" onclick="shareSessionCard(${s.id})">✨ Share session card</button>
-        <button class="btn btn-ghost" onclick="downloadSessionCsv(${s.id})">⬇️ CSV</button>
-        <button class="btn btn-ghost" onclick="showCoachReport(${s.id})">🏆 Coach report</button>
+    h+=wlPills(w,l,t);
+    h+=`<div class="actions" style="justify-content:center">
+        <button class="btn btn-share" onclick="shareSessionCard(${s.id})">${ic('share')} Share card</button>
+        <button class="btn btn-ghost" onclick="showCoachReport(${s.id})">${ic('coach')} Coach</button>
       </div>
-      <div id="session-coach-box"></div>`;
-    h+=ms.map((m,i)=>`<div class="match-row" onclick="toggleMatchDetail(${m.id},this)">
+      <div id="session-coach-box"></div>
+      <div id="session-deep-active"></div>`;
+    h+=ms.map((m,i)=>matchRowHtml(m,i)).join('');
+  }else h+=`<div class="empty-state" style="padding:18px"><p>No matches yet. Play a game!</p></div>`;
+  h+=`</div>`;document.getElementById('active-content').innerHTML=h;
+  if(t>0) loadSessionDeepStats(s.id,'session-deep-active');
+}
+function matchRowHtml(m,i){
+  return `<div class="match-row" onclick="toggleMatchDetail(${m.id},this)">
       <div><div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Match ${i+1}</div>
         <div class="score">${m.user_score} – ${m.opponent_score}</div></div>
       <div class="meta">
         <span class="${m.result==='win'?'result-win':'result-loss'}">${(m.result||'').toUpperCase()}</span>
-        <span class="session-badge">${m.playlist||'Unknown'}</span>
+        <span class="tag">${ic('playlist')} ${m.playlist||'Unknown'}</span>
         ${matchBadges(m)}
       </div>
       <div style="color:var(--muted);font-size:.75rem">details</div>
-      <div class="match-detail-popup"></div></div>`).join('');
-  }else h+=`<div class="empty-state" style="padding:18px"><p>No matches yet. Play a game!</p></div>`;
-  h+=`</div>`;document.getElementById('active-content').innerHTML=h;
+      <div class="match-detail-popup"></div></div>`;
 }
-async function endSession(){if(!confirm('End this session?'))return;try{await api('/api/sessions/'+activeSessionId+'/end',{method:'POST'});showToast('Session ended');activeSessionId=null;loadActiveSession()}catch(e){showToast('❌ '+e.message)}}
+async function endSession(){if(!confirm('End this session?'))return;try{await api('/api/sessions/'+activeSessionId+'/end',{method:'POST'});showToast('Session ended');activeSessionId=null;loadActiveSession()}catch(e){showToast('Error: '+e.message)}}
 
 async function loadHistory(){
   const c=document.getElementById('history-content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';
+  olderMatchesOffset=0;
   try{
     const ss=await api('/api/sessions');
-    if(!ss.length){c.innerHTML='<div class="empty-state"><h3>📋 No sessions yet</h3><p>Play some Rocket League!</p></div>';return}
+    if(!ss.length){c.innerHTML='<div class="empty-state"><h3>No sessions yet</h3><p>Play some Rocket League!</p></div>';return}
     c.innerHTML=ss.map(s=>{
       const w=s.wins||0,l=s.losses||0,t=w+l,wr=t?Math.round(w/t*100):0;
       const accent=t>0&&w>=l?'var(--green)':t>0?'var(--red)':'var(--violet)';
       return`<div class="card session-card" style="border-left:4px solid ${accent}" onclick="toggleSessionExpand(${s.id})">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-          <span>${formatDate(s.started_at)}</span>
+        <div class="session-head">
+          <span style="font-weight:700">${formatDate(s.started_at)}</span>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <span class="session-badge">${s.mode==='duo'?'👥 Duo'+(s.friend_name?' w/ '+s.friend_name:''):'🧑 Solo'}</span>
-            <span class="session-badge ${s.status==='active'?'badge-active':'badge-completed'}">${s.status==='active'?'● Live':'✓ Done'}</span>
+            <span class="tag ${s.mode==='duo'?'duo':'solo'}">${ic(s.mode==='duo'?'users':'user')} ${s.mode==='duo'?('Duo'+(s.friend_name?' · '+s.friend_name:'')):'Solo'}</span>
+            <span class="tag ${s.status==='active'?'live':''}">${s.status==='active'?'Live':'Done'}</span>
           </div>
         </div>
-        <div style="display:flex;gap:14px;margin-top:10px;font-size:.85rem;flex-wrap:wrap">
-          <span>Matches: <b>${t}</b></span>
-          ${t?`<span style="color:var(--green)">🏆 ${w}W</span><span style="color:var(--red)">💀 ${l}L</span><span style="color:${wr>=50?'var(--green)':'var(--red)'}">${wr}%</span>`:'<span style="color:var(--muted)">No matches</span>'}
+        <div class="session-meta">
+          <span class="tag">Matches <b style="margin-left:4px;color:var(--text)">${t}</b></span>
+          ${t?`<span class="wl-pill w" style="padding:4px 10px;font-size:.78rem">${ic('win')} ${w}W</span>
+               <span class="wl-pill l" style="padding:4px 10px;font-size:.78rem">${ic('loss')} ${l}L</span>
+               <span class="wl-pill r" style="padding:4px 10px;font-size:.78rem">${wr}%</span>`:
+               `<span style="color:var(--muted);font-size:.85rem">No matches</span>`}
         </div>
         <div class="session-expand" id="expand-${s.id}" onclick="event.stopPropagation()"></div>
-      </div>`}).join('')+`<div id="older-matches" style="text-align:center;margin-top:12px"><button class="btn btn-primary" onclick="loadOlderMatches()">📜 Load older matches</button></div><div id="older-matches-results"></div>`;
+      </div>`}).join('')+`<div class="older-wrap"><button class="btn-older" onclick="loadOlderMatches()">${ic('older')} Load older matches</button></div><div id="older-matches-results"></div>`;
   }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
 }
 async function toggleSessionExpand(sid){
@@ -339,42 +465,26 @@ async function toggleSessionExpand(sid){
   e.classList.add('open');e.innerHTML='<div class="loading" style="padding:12px"><div class="spinner"></div></div>';
   try{
     const s=await api('/api/sessions/'+sid),ms=s.matches||[];
-    let h=ms.length?ms.map((m,i)=>`<div class="match-row" onclick="toggleMatchDetail(${m.id},this)">
-      <div><div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Match ${i+1}</div>
-        <div class="score">${m.user_score} – ${m.opponent_score}</div></div>
-      <div class="meta">
-        <span class="${m.result==='win'?'result-win':'result-loss'}">${(m.result||'').toUpperCase()}</span>
-        <span class="session-badge">${m.playlist||'Unknown'}</span>
-        ${matchBadges(m)}
-      </div>
-      <div style="color:var(--muted);font-size:.75rem">tap for details</div>
-      <div class="match-detail-popup"></div></div>`).join(''):'<p style="color:var(--muted);padding:10px;text-align:center">No matches</p>';
-    h+=`<div class="actions"><button class="btn btn-share" onclick="shareSessionCard(${sid})">✨ Share card</button>
-      <button class="btn btn-ghost" onclick="downloadSessionCsv(${sid})">⬇️ CSV</button>
-      <button class="btn btn-ghost" onclick="showCoachReport(${sid},'expand-coach-${sid}')">🏆 Coach</button>
-      <button class="btn btn-danger" onclick="deleteSession(${sid})">🗑️ Delete</button></div>
-      <div id="expand-coach-${sid}"></div><div id="session-deep-${sid}" class="session-deep"></div>`;
-    e.innerHTML=h;loadSessionDeepStats(sid);
+    let h=ms.length?ms.map((m,i)=>matchRowHtml(m,i)).join(''):'<p style="color:var(--muted);padding:10px;text-align:center">No matches</p>';
+    h+=`<div class="actions">
+      <button class="btn btn-share" onclick="shareSessionCard(${sid})">${ic('share')} Share card</button>
+      <button class="btn btn-ghost" onclick="showCoachReport(${sid},'expand-coach-${sid}')">${ic('coach')} Coach</button>
+      <button class="btn btn-danger" onclick="deleteSession(${sid})">${ic('trash')} Delete</button>
+    </div>
+    <div id="expand-coach-${sid}"></div>
+    <div id="session-deep-${sid}"></div>`;
+    e.innerHTML=h;loadSessionDeepStats(sid,'session-deep-'+sid);
   }catch(err){e.innerHTML=`<p style="color:var(--red);padding:10px">${err.message}</p>`}
 }
-async function loadSessionDeepStats(sid){
-  const c=document.getElementById('session-deep-'+sid);if(!c)return;
+async function loadSessionDeepStats(sid, elId){
+  const c=document.getElementById(elId||('session-deep-'+sid));if(!c)return;
   try{
-    const deep=await api('/api/sessions/'+sid+'/deep');const a=deep.aggregates||{};if(!a.total_matches){c.innerHTML='';return}
-    const fg=a.all_time_fastest_goal||0,asp=a.overall_avg_shot_power||0;
-    const mv=(ico,val,label,cls='')=>`<div class="metric-card ${cls||''}"><div class="metric-ico">${ico}</div><div class="metric-value">${val}</div><div class="metric-label">${label}</div></div>`;
-    c.innerHTML=`<div class="deep-section"><h3>Session deep stats</h3><div class="deep-metrics">
-      ${mv('🚀', fg>0?Number(fg).toFixed(1)+' km/h':'—', 'Fastest Goal', fg>0?'orange':'muted')}
-      ${mv('💥', asp>0?Number(asp).toFixed(1)+' km/h':'—', 'Avg Shot Power', asp>0?'blue':'muted')}
-      ${mv('🎯', (a.shot_accuracy||0)+'%', 'Accuracy', 'green')}
-      ${mv('📡', a.total_shots||0, 'Shots', 'blue')}
-      ${mv('🧱', (a.avg_wall_time||0)+'%', 'Wall', (a.avg_wall_time||0)>0?'':'muted')}
-      ${mv('⚽', a.total_goals||0, 'Goals', 'green')}
-    </div></div>`;
+    const deep=await api('/api/sessions/'+sid+'/deep');const a=deep.aggregates||{};
+    if(!a.total_matches){c.innerHTML='';return}
+    c.innerHTML=`<div class="deep-section"><h3>Session deep stats</h3></div>`+renderDeepBlocks(a);
   }catch(e){c.innerHTML=''}
 }
-async function deleteSession(sid){if(!confirm('Delete this entire session?'))return;try{await api('/api/sessions/'+sid,{method:'DELETE'});showToast('Deleted');loadHistory()}catch(e){showToast('❌ '+e.message)}}
-let olderMatchesOffset=0;
+async function deleteSession(sid){if(!confirm('Delete this entire session?'))return;try{await api('/api/sessions/'+sid,{method:'DELETE'});showToast('Session deleted');loadHistory()}catch(e){showToast('Error: '+e.message)}}
 async function loadOlderMatches(){
   const c=document.getElementById('older-matches-results');
   try{
@@ -382,10 +492,20 @@ async function loadOlderMatches(){
     if(!sums.length){c.insertAdjacentHTML('beforeend','<p style="color:var(--muted);text-align:center;padding:12px">No more matches</p>');return}
     c.insertAdjacentHTML('beforeend',sums.map(s=>{
       const accent=s.result==='win'?'var(--green)':'var(--red)';
-      return`<div class="card" style="border-left:4px solid ${accent}"><div style="display:flex;justify-content:space-between"><div><b>${s.user_score}-${s.opponent_score}</b> <span style="color:${accent};font-weight:700">${(s.result||'').toUpperCase()}</span></div><span style="color:var(--muted);font-size:.75rem">${relativeTime(s.played_at)}</span></div>
-      <div style="margin-top:6px;font-size:.78rem;color:var(--soft)">${s.highlight_icon||'⚽'} ${s.highlight_text||''}: <b>${s.highlight_value||0}</b> · ${s.playlist||''} · ⚽${s.goals} 🎯${s.shots} 🛡️${s.saves} 💥${s.demos_given}</div></div>`}).join(''));
+      return`<div class="card" style="border-left:4px solid ${accent}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <div><span class="score" style="font-size:1.1rem">${s.user_score} – ${s.opponent_score}</span>
+            <span class="${s.result==='win'?'result-win':'result-loss'}" style="margin-left:10px">${(s.result||'').toUpperCase()}</span></div>
+          <span style="color:var(--muted);font-size:.75rem">${relativeTime(s.played_at)}</span>
+        </div>
+        <div class="hi-line">
+          <span class="hi-chip">${s.highlight_text||'Highlight'}: <b>${s.highlight_value||0}</b></span>
+          <span class="tag">${ic('playlist')} ${s.playlist||'Unknown'}</span>
+          ${matchBadges(s)}
+        </div>
+      </div>`}).join(''));
     olderMatchesOffset+=sums.length;
-  }catch(e){showToast('❌ '+e.message)}
+  }catch(e){showToast('Error: '+e.message)}
 }
 
 async function loadStats(){
@@ -398,21 +518,21 @@ async function loadStats(){
     const s=await api('/api/stats'+qs);const t=s.overall.total||0;
     const chipsMode=[['all','All'],['solo','Solo'],['duo','Duo']].map(([v,l])=>`<button class="chip ${statsMode===v?'active':''}" onclick="statsMode='${v}';loadStats()">${l}</button>`).join('');
     const chipsPl=[`<button class="chip ${statsPlaylist==='all'?'active':''}" onclick="statsPlaylist='all';loadStats()">All playlists</button>`]
-      .concat(playlistsCache.map(p=>`<button class="chip ${statsPlaylist===p.playlist?'active':''}" onclick="statsPlaylist='${String(p.playlist).replace(/'/g,"\\'")}';loadStats()">${p.playlist} (${p.total})</button>`)).join('');
-    if(!t){c.innerHTML=`<div style="text-align:center"><button class="refresh-btn" onclick="loadStats()">🔄 Refresh Stats</button></div><div class="filters">${chipsMode}</div><div class="filters">${chipsPl}</div><div class="empty-state"><h3>📊 No stats for this filter</h3></div>`;return}
+      .concat(playlistsCache.map(p=>`<button class="chip ${statsPlaylist===p.playlist?'active':''}" onclick="statsPlaylist='${String(p.playlist).replace(/'/g,"\'")}';loadStats()">${p.playlist} (${p.total})</button>`)).join('');
+    if(!t){c.innerHTML=`<div style="text-align:center"><button class="refresh-btn" onclick="loadStats()">${ic('refresh')} Refresh Stats</button></div><div class="filters">${chipsMode}</div><div class="filters">${chipsPl}</div><div class="empty-state"><h3>No stats for this filter</h3></div>`;return}
     const owr=Math.round((s.overall.wins||0)/t*100),swr=s.solo.total?Math.round(s.solo.wins/s.solo.total*100):0,dwr=s.duo.total?Math.round(s.duo.wins/s.duo.total*100):0;
     const buildForm=rs=>{const dots=rs.map(r=>`<div class="form-dot ${r}">${r==='win'?'W':'L'}</div>`);while(dots.length<20)dots.push('<div class="form-dot placeholder">-</div>');return dots.join('')};
     const calcStreak=rs=>{let n=0;for(const r of (rs||[])){if(r!=='win')break;n++}return n};
     const soloHtml=buildForm((s.recent_solo||[]).slice().reverse());const duoHtml=buildForm((s.recent_duo||[]).slice().reverse());
     const ss=calcStreak(s.recent_solo||[]),ds=calcStreak(s.recent_duo||[]);
-    c.innerHTML=`<div style="text-align:center"><button class="refresh-btn" onclick="loadStats()">🔄 Refresh Stats</button></div>
+    c.innerHTML=`<div style="text-align:center"><button class="refresh-btn" onclick="loadStats()">${ic('refresh')} Refresh Stats</button></div>
       <div class="filters">${chipsMode}</div><div class="filters">${chipsPl}</div>
       <div class="stats-grid">
         <div class="stat-card ${owr>=50?'win-card':'loss-card'}"><h4>Filtered</h4><div class="big-number">${owr}%</div><div style="color:var(--soft);font-size:.8rem">${s.overall.wins||0}W · ${s.overall.losses||0}L · ${t} games</div><div class="winrate-bar"><div class="winrate-fill" style="width:${owr}%"></div></div></div>
-        <div class="stat-card ${swr>=50?'win-card':'loss-card'}"><h4>🧑 Solo</h4><div class="big-number">${swr}%</div><div style="color:var(--soft);font-size:.8rem">${s.solo.wins||0}W · ${s.solo.losses||0}L</div>
-          <div class="recent-form">${soloHtml}</div>${ss>=3?`<div class="streak-badge hot">🔥 ${ss} W streak</div>`:''}</div>
-        <div class="stat-card ${dwr>=50?'win-card':'loss-card'}"><h4>👥 Duo</h4><div class="big-number">${dwr}%</div><div style="color:var(--soft);font-size:.8rem">${s.duo.wins||0}W · ${s.duo.losses||0}L</div>
-          <div class="recent-form">${duoHtml}</div>${ds>=3?`<div class="streak-badge hot">🔥 ${ds} W streak</div>`:''}</div>
+        <div class="stat-card ${swr>=50?'win-card':'loss-card'}"><h4>${ic('user')} Solo</h4><div class="big-number">${swr}%</div><div style="color:var(--soft);font-size:.8rem">${s.solo.wins||0}W · ${s.solo.losses||0}L</div>
+          <div class="recent-form">${soloHtml}</div>${ss>=3?`<div class="streak-badge hot">${ss} W streak</div>`:''}</div>
+        <div class="stat-card ${dwr>=50?'win-card':'loss-card'}"><h4>${ic('users')} Duo</h4><div class="big-number">${dwr}%</div><div style="color:var(--soft);font-size:.8rem">${s.duo.wins||0}W · ${s.duo.losses||0}L</div>
+          <div class="recent-form">${duoHtml}</div>${ds>=3?`<div class="streak-badge hot">${ds} W streak</div>`:''}</div>
       </div><div id="deep-stats-container"></div>`;
     loadDeepStats(qs);
   }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
@@ -420,31 +540,9 @@ async function loadStats(){
 async function loadDeepStats(qs=''){
   const c=document.getElementById('deep-stats-container');if(!c)return;
   try{
-    const deep=await api('/api/stats/deep'+qs);const a=deep.aggregates||{};if(!a.total_matches){c.innerHTML='';return}
-    const n1=v=>Number(v||0);const fg=a.all_time_fastest_goal||0,asp=a.overall_avg_shot_power||0,sa=a.shot_accuracy||0;
-    const mv=(ico,val,label,cls='')=>`<div class="metric-card ${cls}"><div class="metric-ico">${ico}</div><div class="metric-value">${val}</div><div class="metric-label">${label}</div></div>`;
-    c.innerHTML=`<div class="deep-section"><h3>Shot Power & Accuracy</h3><div class="deep-metrics">
-      ${mv('🚀', fg>0?n1(fg).toFixed(1)+' km/h':'—','Fastest Goal',fg>0?'orange':'muted')}
-      ${mv('💥', asp>0?n1(asp).toFixed(1)+' km/h':'—','Avg Shot Power',asp>0?'blue':'muted')}
-      ${mv('🎯', sa+'%','Accuracy','green')}
-      ${mv('📡', a.total_shots||0,'Total Shots','blue')}
-    </div></div>
-    <div class="deep-section"><h3>Movement & Boost</h3><div class="deep-metrics">
-      ${mv('⛽', (a.avg_boost||0)+'%','Avg Boost','blue')}
-      ${mv('🔋', (a.avg_boost_time||0)+'%','Boosting','')}
-      ${mv('⚡', (a.avg_supersonic_time||0)+'%','Supersonic','orange')}
-      ${mv('✈️', (a.avg_air_time||0)+'%','Air','')}
-      ${mv('🛣️', (a.avg_ground_time||0)+'%','Ground','')}
-      ${mv('🧱', (a.avg_wall_time||0)+'%','Wall',(a.avg_wall_time||0)>0?'blue':'muted')}
-    </div></div>
-    <div class="deep-section"><h3>Combat & Ball</h3><div class="deep-metrics">
-      ${mv('💥', a.total_demos_given||0,'Demos Given','green')}
-      ${mv('💀', a.total_demos_taken||0,'Demos Taken','red')}
-      ${mv('🛡️', a.total_saves||0,'Saves','')}
-      ${mv('⏱️', a.total_overtime||0,'Overtimes','')}
-      ${mv('✋', a.total_touches||0,'Touches','')}
-      ${mv('⚽', a.total_goals||0,'Goals','green')}
-    </div></div>`;
+    const deep=await api('/api/stats/deep'+qs);const a=deep.aggregates||{};
+    if(!a.total_matches){c.innerHTML='';return}
+    c.innerHTML=renderDeepBlocks(a);
   }catch(e){c.innerHTML='<p style="color:var(--red);text-align:center">Deep stats unavailable</p>'}
 }
 
@@ -456,23 +554,23 @@ async function loadCoach(){
     const ss=await api('/api/sessions');
     const withMatches=ss.filter(s=>(s.wins||0)+(s.losses||0)>0).slice(0,8);
     let sessionPick=withMatches.map(s=>`<button class="chip" onclick="showCoachReport(${s.id},'coach-report-root')">${formatDate(s.started_at)} · ${(s.wins||0)}-${(s.losses||0)}</button>`).join('');
-    if(!tm){c.innerHTML='<div class="empty-state"><h3>🏆 Coach is warming up</h3><p>Play at least one match.</p></div>';return}
+    if(!tm){c.innerHTML='<div class="empty-state"><h3>Coach is warming up</h3><p>Play at least one match.</p></div>';return}
     const wr=rec.total_wins||0,lo=rec.total_losses||0,wrPct=tm?Math.round(wr/tm*100):0;
     const cards=[
-      {icon:'⚽',label:'Most Goals',value:rec.most_goals?.value||0},
-      {icon:'💥',label:'Most Demos',value:rec.most_demos?.value||0},
-      {icon:'🛡️',label:'Most Saves',value:rec.most_saves?.value||0},
-      {icon:'🚀',label:'Fastest Goal',value:rec.fastest_goal_kph?.value||0,unit:' km/h'},
-      {icon:'🎯',label:'Most Shots',value:rec.most_shots?.value||0},
-      {icon:'⛽',label:'Top Boost Time',value:rec.highest_boost_time_pct?.value||0,unit:'%'},
-    ].filter(k=>k.value).map(k=>`<div class="metric-card"><div class="metric-value">${k.value}${k.unit||''}</div><div class="metric-label">${k.icon} ${k.label}</div></div>`).join('');
+      {ico:'goal',label:'Most Goals',value:rec.most_goals?.value||0},
+      {ico:'demo',label:'Most Demos',value:rec.most_demos?.value||0},
+      {ico:'save',label:'Most Saves',value:rec.most_saves?.value||0},
+      {ico:'rocket',label:'Fastest Goal',value:rec.fastest_goal_kph?.value||0,unit:' km/h'},
+      {ico:'shot',label:'Most Shots',value:rec.most_shots?.value||0},
+      {ico:'boost',label:'Top Boost Time',value:rec.highest_boost_time_pct?.value||0,unit:'%'},
+    ].filter(k=>k.value).map(k=>mv(k.ico, `${k.value}${k.unit||''}`, k.label, '')).join('');
     c.innerHTML=`<div class="card" style="border-left:4px solid ${wrPct>=50?'var(--green)':'var(--red)'}">
       <h4 style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Career</h4>
-      <div style="display:flex;justify-content:space-between;align-items:center"><div><span style="color:var(--green);font-size:1.4rem;font-weight:800">🏆 ${wr}W</span> <span style="color:var(--muted);margin:0 8px">·</span> <span style="color:var(--red);font-size:1.4rem;font-weight:800">💀 ${lo}L</span></div><span style="font-weight:800;color:${wrPct>=50?'var(--green)':'var(--red)'}">${wrPct}%</span></div>
+      ${wlPills(wr,lo,tm)}
       <div class="winrate-bar"><div class="winrate-fill" style="width:${wrPct}%"></div></div>
-      <p style="color:var(--muted);font-size:.72rem;margin-top:8px">${tm} matches tracked</p></div>
-      <div class="card"><h3 style="margin-bottom:12px">🏆 All-time records</h3><div class="deep-metrics">${cards||'<p style="color:var(--muted)">No records yet</p>'}</div></div>
-      <div class="card"><h3 style="margin-bottom:10px">🧠 Coach 2.0 — session report</h3>
+      <p style="color:var(--muted);font-size:.72rem;margin-top:8px;text-align:center">${tm} matches tracked</p></div>
+      <div class="card"><h3 style="margin-bottom:12px">${ic('win')} All-time records</h3><div class="deep-metrics">${cards||'<p style="color:var(--muted)">No records yet</p>'}</div></div>
+      <div class="card"><h3 style="margin-bottom:10px">${ic('coach')} Coach 2.0 — session report</h3>
       <p style="color:var(--muted);font-size:.8rem;margin-bottom:10px">Pick a session for grades + tips (solo or each player in duo).</p>
       <div class="filters" style="justify-content:flex-start">${sessionPick||'<span style="color:var(--muted)">No sessions yet</span>'}</div>
       <div id="coach-report-root"></div></div>`;
@@ -490,15 +588,15 @@ function renderCoachReport(rep){
   (rep.players||[]).forEach(p=>{
     h+=`<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <strong>${p.role==='you'?'🧑':'👥'} ${p.name}</strong>
+        <strong>${ic(p.role==='you'?'user':'users')} ${p.name}</strong>
         <span class="grade-pill" style="background:${gradeColor(p.grade)};font-size:.78rem">${p.grade} · ${p.score}</span>
       </div>
       ${p.limited_data?'<p style="color:var(--muted);font-size:.75rem;margin-bottom:8px">Limited teammate telemetry</p>':''}
       <div class="cat-grid">${Object.entries(p.categories||{}).map(([k,v])=>`<div class="cat"><div class="n">${k}</div><div class="s">${v.score} <span class="${trendClass(v.trend)}">${trendIcon(v.trend)}</span></div><div style="font-size:.72rem;color:var(--muted);margin-top:4px">${v.note||''}</div></div>`).join('')}</div>
-      ${(p.tips||[]).map(t=>`<div class="tip ${t.severity||'info'}"><span>${t.icon||'💡'}</span><span>${t.text}</span></div>`).join('')}
+      ${(p.tips||[]).map(t=>`<div class="tip ${t.severity||'info'}"><span>${t.icon||'•'}</span><span>${t.text}</span></div>`).join('')}
     </div>`;
   });
-  (rep.session_tips||[]).forEach(t=>{h+=`<div class="tip ${t.severity||'info'}"><span>${t.icon||'💡'}</span><span>${t.text}</span></div>`});
+  (rep.session_tips||[]).forEach(t=>{h+=`<div class="tip ${t.severity||'info'}"><span>${t.icon||'•'}</span><span>${t.text}</span></div>`});
   h+='</div>';return h;
 }
 async function showCoachReport(sid, targetId){
@@ -509,45 +607,36 @@ async function showCoachReport(sid, targetId){
   try{const rep=await api('/api/coach/session/'+sid+'/report');box.innerHTML=renderCoachReport(rep)}catch(e){box.innerHTML=`<p style="color:var(--red)">${e.message}</p>`}
 }
 async function shareSessionCard(sid){
-  showToast('✨ Rendering session card...');
+  showToast('Rendering session card...');
   try{
     const r=await fetch('/api/sessions/'+sid+'/card.png');
     if(!r.ok)throw new Error('Card failed');
     const blob=await r.blob();const url=URL.createObjectURL(blob);
     const a=document.createElement('a');a.href=url;a.download=`rl-session-${sid}.png`;a.click();
-    // also open preview
     window.open(url,'_blank');
-    showToast('✅ Session card ready — drop it in Discord!');
-  }catch(e){showToast('❌ '+e.message)}
-}
-async function downloadSessionCsv(sid){
-  try{
-    const r=await fetch('/api/sessions/'+sid+'/export.csv');if(!r.ok)throw new Error('CSV failed');
-    const blob=await r.blob();const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=`session-${sid}.csv`;a.click();
-    showToast('⬇️ CSV downloaded');
-  }catch(e){showToast('❌ '+e.message)}
+    showToast('Session card ready — drop it in Discord!');
+  }catch(e){showToast('Error: '+e.message)}
 }
 async function toggleMatchDetail(mid,el){
   const popup=el.querySelector('.match-detail-popup');
   if(popup.classList.contains('show')){popup.classList.remove('show');popup.innerHTML='';return}
   popup.classList.add('show');popup.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div></div>';
   try{
-    const r=await api('/api/matches/'+mid);const d=r.details||{};const totalShots=d.shots||0;const userGoals=r.match.user_score||0;
+    const r=await api('/api/matches/'+mid);const d=r.details||{};
+    const totalShots=d.shots||0;const userGoals=r.match.user_score||0;
     const sa=totalShots?Math.min(Math.round(userGoals/Math.max(totalShots,1)*100),100):0;
     let coachHtml='';
-    try{const cr=await api('/api/coach/match/'+mid);const ins=cr.insights||[];if(ins.length){coachHtml='<div class="deep-section"><h3>🏆 Coach</h3>'+ins.map(i=>`<div class="tip ${i.severity||'info'}"><span>${i.icon}</span><span>${i.text}</span></div>`).join('')+'</div>'}}catch(e){}
-    popup.innerHTML=coachHtml+`<div class="deep-section"><h3>🎯 Shot & Movement</h3><div class="deep-metrics">
-      <div class="metric-card orange"><div class="metric-value">${d.fastest_goal_kph>0?Number(d.fastest_goal_kph).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Fastest Goal</div></div>
-      <div class="metric-card blue"><div class="metric-value">${d.avg_shot_power>0?Number(d.avg_shot_power).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Avg Power</div></div>
-      <div class="metric-card green"><div class="metric-value">${sa}%</div><div class="metric-label">Accuracy</div></div>
-      <div class="metric-card"><div class="metric-value">${totalShots}</div><div class="metric-label">Shots</div></div>
-      <div class="metric-card blue"><div class="metric-value">${Number(d.boost_avg||0).toFixed(1)}%</div><div class="metric-label">Avg Boost</div></div>
-      <div class="metric-card"><div class="metric-value">${Number(d.air_time_pct||0).toFixed(1)}%</div><div class="metric-label">Air</div></div>
-      <div class="metric-card"><div class="metric-value">${Number(d.wall_time_pct||0).toFixed(1)}%</div><div class="metric-label">Wall</div></div>
-      <div class="metric-card green"><div class="metric-value">${d.demos_given||0}</div><div class="metric-label">Demos</div></div>
-      <div class="metric-card"><div class="metric-value">${d.saves||0}</div><div class="metric-label">Saves</div></div>
-    </div></div>`;
+    try{const cr=await api('/api/coach/match/'+mid);const ins=cr.insights||[];if(ins.length){coachHtml=`<div class="deep-section"><h3>Coach</h3>${ins.map(i=>`<div class="tip ${i.severity||'info'}"><span>${i.icon||'•'}</span><span>${i.text}</span></div>`).join('')}</div>`}}catch(e){}
+    const a={
+      fastest_goal_kph:d.fastest_goal_kph, avg_shot_power:d.avg_shot_power, shot_accuracy:sa,
+      total_shots:totalShots, avg_boost:d.boost_avg, avg_boost_time:d.boost_time_pct,
+      avg_supersonic_time:d.supersonic_time_pct, avg_air_time:d.air_time_pct,
+      avg_ground_time:d.ground_time_pct, avg_wall_time:d.wall_time_pct,
+      demos_given:d.demos_given, demos_taken:d.demos_taken, saves:d.saves,
+      overtime:d.overtime, touches:d.touches, car_touches:d.car_touches, assists:d.assists,
+      total_goals:userGoals, total_matches:1
+    };
+    popup.innerHTML=coachHtml+renderDeepBlocks(a);
   }catch(e){popup.innerHTML=`<p style="color:var(--red)">${e.message}</p>`}
 }
 function pollListenerStatus(){api('/api/listener-status').then(s=>updateListenerUI(s)).catch(()=>updateListenerUI({state:'not_running'}))}
@@ -564,28 +653,30 @@ function updateListenerUI(s){
     default:set('dot-off','state-off',s.message||s.state||'unknown','—');
   }
 }
-function toggleSettings(){const m=document.getElementById('settings-modal');if(m.style.display==='flex'){m.style.display='none';return}api('/api/config').then(c=>{document.getElementById('cfg-player-name').value=c.name||'';document.getElementById('cfg-friends').value=(c.friends||[]).join('\\n')}).catch(()=>{});m.style.display='flex';checkRlConfig()}
-async function saveSettings(){const n=document.getElementById('cfg-player-name').value.trim(),fr=document.getElementById('cfg-friends').value.trim(),fs=fr?fr.split('\n').map(f=>f.trim()).filter(Boolean):[];try{await api('/api/config',{method:'POST',body:JSON.stringify({name:n,friends:fs})});showToast('✅ Settings saved');toggleSettings();setTimeout(pollListenerStatus,2000)}catch(e){showToast('❌ '+e.message)}}
-async function checkRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Checking...';try{const s=await api('/api/rl-config');if(!s.config_dir_found){b.textContent='❌ Not Found';m.textContent='RL Config folder not found'}else if(!s.ini_exists){b.textContent='⚠️ Missing';m.textContent='TAStatsAPI.ini missing — Auto-Create'}else if(!s.ini_correct){b.textContent='⚠️ Wrong';m.textContent='INI incomplete — Auto-Create'}else{b.textContent='✅ OK';m.textContent=s.ini_read_by_rl?'INI OK (RL has read it)':'INI OK — restart RL if port closed'}}catch(e){b.textContent='❌';m.textContent=e.message}}
-async function createRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');try{const r=await api('/api/rl-config',{method:'POST'});if(r.created){b.textContent='✅ Created';m.textContent='Restart Rocket League fully';showToast('✅ Restart RL')}else{b.textContent='❌';m.textContent=r.message}}catch(e){b.textContent='❌';m.textContent=e.message}}
-async function exitTracker(){if(!confirm('Exit RL Tracker?'))return;try{await api('/api/quit',{method:'POST'})}catch(e){}showToast('👋 Shutting down');setTimeout(()=>window.close(),500)}
+function toggleSettings(){const m=document.getElementById('settings-modal');if(m.style.display==='flex'){m.style.display='none';return}api('/api/config').then(c=>{document.getElementById('cfg-player-name').value=c.name||'';document.getElementById('cfg-friends').value=(c.friends||[]).join('
+')}).catch(()=>{});m.style.display='flex';checkRlConfig()}
+async function saveSettings(){const n=document.getElementById('cfg-player-name').value.trim(),fr=document.getElementById('cfg-friends').value.trim(),fs=fr?fr.split('
+').map(f=>f.trim()).filter(Boolean):[];try{await api('/api/config',{method:'POST',body:JSON.stringify({name:n,friends:fs})});showToast('Settings saved');toggleSettings();setTimeout(pollListenerStatus,2000)}catch(e){showToast('Error: '+e.message)}}
+async function checkRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Checking...';try{const s=await api('/api/rl-config');if(!s.config_dir_found){b.textContent='Not Found';m.textContent='RL Config folder not found'}else if(!s.ini_exists){b.textContent='Missing';m.textContent='TAStatsAPI.ini missing — Auto-Create'}else if(!s.ini_correct){b.textContent='Wrong';m.textContent='INI incomplete — Auto-Create'}else{b.textContent='OK';m.textContent=s.ini_read_by_rl?'INI OK (RL has read it)':'INI OK — restart RL if port closed'}}catch(e){b.textContent='Error';m.textContent=e.message}}
+async function createRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');try{const r=await api('/api/rl-config',{method:'POST'});if(r.created){b.textContent='Created';m.textContent='Restart Rocket League fully';showToast('Restart RL')}else{b.textContent='Failed';m.textContent=r.message}}catch(e){b.textContent='Error';m.textContent=e.message}}
+async function exitTracker(){if(!confirm('Exit RL Tracker completely? (Closing the browser tab is not enough)'))return;try{await api('/api/quit',{method:'POST'})}catch(e){}showToast('Shutting down...');setTimeout(()=>window.close(),500)}
 async function checkForUpdates(){
   const box=document.getElementById('update-results');const badge=document.getElementById('update-badge-modal');
   box.style.display='block';box.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div></div>';
-  try{const d=await api('/api/check-update');renderUpdateResult(d)}catch(e){box.innerHTML='<p style="color:var(--red)">❌ '+e.message+'</p>'}
+  try{const d=await api('/api/check-update');renderUpdateResult(d)}catch(e){box.innerHTML='<p style="color:var(--red)">'+e.message+'</p>'}
 }
 function renderUpdateResult(d){
   const box=document.getElementById('update-results');const badge=document.getElementById('update-badge-modal');
-  if(!d.ok){box.innerHTML='<p style="color:var(--red)">❌ '+(d.error||'fail')+'</p>';return}
-  if(d.update_available){if(badge)badge.textContent='⬆️ v'+d.latest;box.innerHTML=`<div style="padding:10px;border:1px solid var(--orange);border-radius:10px;background:rgba(251,146,60,.08)"><b style="color:var(--orange)">Update available</b><div style="font-size:.75rem;margin-top:4px">v${d.current} → <b>v${d.latest}</b></div><button class="btn btn-share" style="margin-top:8px;width:100%" onclick="performUpdate()">⚡ One-Click Update</button><div id="update-progress" style="display:none;margin-top:8px"></div></div>`}
-  else{if(badge){badge.textContent='✅ latest';badge.style.color='var(--green)'}box.innerHTML=`<div style="padding:10px;border:1px solid var(--green);border-radius:10px;color:var(--green)">✅ Up to date (v${d.current})</div>`}
+  if(!d.ok){box.innerHTML='<p style="color:var(--red)">'+(d.error||'fail')+'</p>';return}
+  if(d.update_available){if(badge)badge.textContent='v'+d.latest+' available';box.innerHTML=`<div style="padding:10px;border:1px solid var(--orange);border-radius:10px;background:rgba(251,146,60,.08)"><b style="color:var(--orange)">Update available</b><div style="font-size:.75rem;margin-top:4px">v${d.current} → <b>v${d.latest}</b></div><button class="btn btn-share" style="margin-top:8px;width:100%" onclick="performUpdate()">One-Click Update</button><div id="update-progress" style="display:none;margin-top:8px"></div></div>`}
+  else{if(badge){badge.textContent='Up to date';badge.style.color='var(--green)'}box.innerHTML=`<div style="padding:10px;border:1px solid var(--green);border-radius:10px;color:var(--green)">Up to date (v${d.current})</div>`}
 }
-async function silentUpdateCheck(){try{const d=await api('/api/check-update');if(d.ok&&d.update_available){const b=document.getElementById('update-badge');if(b){b.style.display='inline';b.textContent='● Update available (v'+d.latest+')'}}}catch(e){}}
-async function performUpdate(){const prog=document.getElementById('update-progress');if(!prog)return;prog.style.display='block';prog.innerHTML='Downloading...';try{const r=await api('/api/update',{method:'POST'});prog.innerHTML=r.ok?('✅ '+r.message):('❌ '+(r.error||'fail'));if(r.ok)showToast('🔄 Updated to v'+r.new_version)}catch(e){if((e.message||'').includes('not reachable')){prog.innerHTML='✅ Restarting...';showToast('🔄 Restarting')}else prog.innerHTML='❌ '+e.message}}
+async function silentUpdateCheck(){try{const d=await api('/api/check-update');if(d.ok&&d.update_available){const b=document.getElementById('update-badge');if(b){b.style.display='inline';b.textContent='Update available (v'+d.latest+')'}}}catch(e){}}
+async function performUpdate(){const prog=document.getElementById('update-progress');if(!prog)return;prog.style.display='block';prog.innerHTML='Downloading...';try{const r=await api('/api/update',{method:'POST'});prog.innerHTML=r.ok?r.message:('Failed: '+(r.error||''));if(r.ok)showToast('Updated to v'+r.new_version)}catch(e){if((e.message||'').includes('not reachable')){prog.innerHTML='Restarting...';showToast('Restarting')}else prog.innerHTML=e.message}}
 document.getElementById('settings-modal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('settings-modal').style.display='none'});
 loadActiveSession();setInterval(pollListenerStatus,10000);pollListenerStatus();silentUpdateCheck();
-(async()=>{try{const c=await api('/api/config');if(!c.name)setTimeout(()=>{toggleSettings();showToast('👋 Welcome! Enter your RL nickname.')},1200)}catch(e){}})();
+(async()=>{try{const c=await api('/api/config');if(!c.name)setTimeout(()=>{toggleSettings();showToast('Welcome! Enter your RL nickname.')},1200)}catch(e){}})();
 </script>
 </body>
 </html>
