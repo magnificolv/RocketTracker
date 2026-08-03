@@ -2,15 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RL Tracker 3.0 · Starlight</title>
+<title>RL Tracker 3.0.1 · Starlight</title>
 <style>
+
 :root{
-  --bg:#050510;--bg2:#0a0a18;--card:rgba(18,18,42,.88);--card2:rgba(12,12,28,.92);
-  --border:rgba(99,102,241,.22);--border2:#2a2a48;
+  --bg:#050510;--bg2:#0a0a18;--card:rgba(18,18,42,.9);--card2:rgba(12,12,28,.94);
+  --border:rgba(99,102,241,.24);--border2:#2a2a48;
   --text:#eef1ff;--muted:#9aa3c7;--soft:#b4bfd6;
   --cyan:#22d3ee;--violet:#a78bfa;--orchid:#e879f9;--pink:#f472b6;
   --blue:#38bdf8;--orange:#fb923c;--green:#4ade80;--red:#f87171;
-  --r:18px;--rsm:12px;--shadow:0 12px 40px rgba(0,0,0,.45);
+  --r:20px;--rsm:14px;--shadow:0 14px 44px rgba(0,0,0,.48);
   --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   --grad:linear-gradient(115deg,#22d3ee,#a78bfa,#e879f9,#f472b6);
 }
@@ -19,52 +20,90 @@ body{
   font-family:var(--font);color:var(--text);min-height:100vh;
   background:var(--bg);
   background-image:
-    linear-gradient(180deg,rgba(5,5,16,.55),rgba(5,5,16,.82)),
+    linear-gradient(180deg,rgba(5,5,16,.55),rgba(5,5,16,.84)),
     url('fons.jpg'),
     radial-gradient(ellipse 70% 50% at 50% -10%,rgba(99,102,241,.28),transparent 60%),
     radial-gradient(ellipse 50% 40% at 80% 100%,rgba(232,121,249,.12),transparent 55%);
   background-size:cover,cover,auto,auto;background-attachment:fixed;background-position:center;
-  padding:0 18px 56px;
+  padding:0 18px 100px;
 }
-.listener-bar{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 14px;font-size:.75rem;font-weight:700;letter-spacing:.03em;border-bottom:1px solid var(--border);background:rgba(10,10,24,.85);backdrop-filter:blur(10px)}
-.dot{width:8px;height:8px;border-radius:50%}
-.dot-live{background:var(--green);box-shadow:0 0 10px var(--green);animation:pulse 2s infinite}
-.dot-connecting{background:#fbbf24;box-shadow:0 0 8px #fbbf24;animation:pulse 1s infinite}
-.dot-off{background:var(--muted)}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-.header{text-align:center;padding:42px 0 18px;position:relative}
+/* ===== LIVE STATUS (premium pill) ===== */
+.listener-wrap{position:sticky;top:0;z-index:40;display:flex;justify-content:center;padding:12px 0 0;pointer-events:none}
+.listener-bar{
+  pointer-events:auto;display:inline-flex;align-items:center;gap:10px;
+  padding:10px 18px 10px 12px;border-radius:999px;
+  background:linear-gradient(135deg,rgba(16,16,36,.92),rgba(12,12,28,.95));
+  border:1px solid rgba(74,222,128,.28);
+  box-shadow:0 8px 28px rgba(0,0,0,.4),0 0 24px rgba(74,222,128,.08);
+  backdrop-filter:blur(16px);font-size:.78rem;font-weight:700;letter-spacing:.02em;
+}
+.listener-bar.state-off{border-color:rgba(154,163,199,.25);box-shadow:0 8px 28px rgba(0,0,0,.4)}
+.listener-bar.state-connecting{border-color:rgba(251,191,36,.35);box-shadow:0 8px 28px rgba(0,0,0,.4),0 0 20px rgba(251,191,36,.1)}
+.listener-bar.state-live{border-color:rgba(74,222,128,.4);box-shadow:0 8px 28px rgba(0,0,0,.4),0 0 28px rgba(74,222,128,.14)}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dot-live{background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 2s infinite}
+.dot-connecting{background:#fbbf24;box-shadow:0 0 10px #fbbf24;animation:pulse 1s infinite}
+.dot-off{background:var(--muted);box-shadow:none}
+.listener-bar .status-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.listener-bar.state-off .status-text{-webkit-text-fill-color:var(--muted);background:none}
+.listener-bar .status-chip{font-size:.65rem;padding:3px 8px;border-radius:999px;background:rgba(74,222,128,.12);color:var(--green);border:1px solid rgba(74,222,128,.25)}
+.listener-bar.state-off .status-chip{background:rgba(154,163,199,.1);color:var(--muted);border-color:rgba(154,163,199,.2)}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.92)}}
+/* ===== HEADER ===== */
+.header{text-align:center;padding:28px 0 16px;position:relative}
 .header-logo{width:64px;height:64px;border-radius:18px;vertical-align:middle;margin-right:12px;box-shadow:0 0 28px rgba(167,139,250,.35),0 0 48px rgba(34,211,238,.15)}
 .header h1{display:inline-block;vertical-align:middle;font-size:2.2rem;font-weight:800;letter-spacing:-.03em}
 .header h1 .accent{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 16px rgba(232,121,249,.35))}
 .header .subtitle{color:var(--soft);margin-top:8px;font-size:.92rem;text-shadow:0 0 18px rgba(129,140,248,.2)}
 .header .version{color:var(--muted);font-size:.7rem;margin-top:6px;opacity:.75}
 .header::after{content:'';display:block;width:140px;height:3px;margin:16px auto 0;border-radius:3px;background:var(--grad);opacity:.75}
-.nav{display:flex;justify-content:center;gap:6px;max-width:620px;margin:0 auto 28px;padding:5px;border-radius:999px;background:rgba(18,18,42,.75);border:1px solid var(--border);backdrop-filter:blur(14px);box-shadow:var(--shadow)}
-.nav-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 10px;border:none;border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:.84rem;font-weight:700;cursor:pointer;transition:.18s}
-.nav-btn img{width:18px;height:18px;opacity:.7}
-.nav-btn:hover{color:var(--text)}
+/* ===== NAV with SVG icons ===== */
+.nav{display:flex;justify-content:center;gap:6px;max-width:640px;margin:0 auto 26px;padding:6px;border-radius:999px;background:rgba(18,18,42,.78);border:1px solid var(--border);backdrop-filter:blur(14px);box-shadow:var(--shadow)}
+.nav-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 12px;border:none;border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:.86rem;font-weight:700;cursor:pointer;transition:.18s}
+.nav-btn .ni{width:18px;height:18px;display:inline-flex;opacity:.75}
+.nav-btn .ni svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nav-btn:hover{color:var(--text)}.nav-btn:hover .ni{opacity:1}
 .nav-btn.active{background:linear-gradient(135deg,#6366f1,#a78bfa);color:#fff;box-shadow:0 4px 18px rgba(99,102,241,.35)}
-.nav-btn.active img{opacity:1;filter:brightness(1.3)}
-.container{max-width:760px;margin:0 auto}
+.nav-btn.active .ni{opacity:1}
+.container{max-width:780px;margin:0 auto}
 .panel{display:none}.panel.active{display:block}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px 22px;margin-bottom:14px;backdrop-filter:blur(12px);box-shadow:var(--shadow);animation:in .28s ease}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px;margin-bottom:14px;backdrop-filter:blur(14px);box-shadow:var(--shadow);animation:in .28s ease}
 @keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .card.win-card{border-left:4px solid var(--green)}.card.loss-card{border-left:4px solid var(--red)}
 .session-card{cursor:pointer;transition:.18s}.session-card:hover{transform:translateY(-2px);border-color:rgba(167,139,250,.45)}
-.btn{padding:9px 16px;border-radius:999px;border:1px solid transparent;cursor:pointer;font:inherit;font-size:.8rem;font-weight:700;transition:.18s}
+.btn{padding:10px 16px;border-radius:999px;border:1px solid transparent;cursor:pointer;font:inherit;font-size:.8rem;font-weight:700;transition:.18s;display:inline-flex;align-items:center;gap:6px}
 .btn-primary{background:linear-gradient(135deg,#6366f1,#a78bfa);color:#fff}
 .btn-primary:hover{box-shadow:0 6px 20px rgba(99,102,241,.35);transform:translateY(-1px)}
-.btn-ghost{background:transparent;color:var(--muted);border-color:var(--border2)}
-.btn-ghost:hover{color:var(--text);border-color:var(--violet)}
-.btn-danger{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3)}
-.btn-share{background:linear-gradient(135deg,#22d3ee,#a78bfa);color:#041018}
+.btn-ghost{background:rgba(255,255,255,.03);color:var(--soft);border-color:var(--border2)}
+.btn-ghost:hover{color:var(--text);border-color:var(--violet);background:rgba(167,139,250,.08)}
+.btn-danger{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.28)}
+.btn-danger:hover{background:rgba(248,113,113,.18);box-shadow:0 0 16px rgba(248,113,113,.15)}
+.btn-share{background:linear-gradient(135deg,#22d3ee,#a78bfa);color:#041018;box-shadow:0 4px 16px rgba(34,211,238,.2)}
+.btn-share:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(167,139,250,.3)}
 .input{width:100%;padding:11px 14px;background:rgba(8,8,18,.9);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font:inherit;outline:none}
 .input:focus{border-color:var(--violet)}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100}
 .modal{background:rgba(16,16,36,.97);border:1px solid rgba(167,139,250,.28);border-radius:var(--r);padding:26px;max-width:480px;width:92%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.55)}
-.settings-toggle,.exit-btn{position:fixed;bottom:22px;width:46px;height:46px;border-radius:50%;border:1px solid var(--border);background:var(--card);cursor:pointer;z-index:50;display:flex;align-items:center;justify-content:center;font-size:1.15rem;color:var(--muted);backdrop-filter:blur(10px)}
-.settings-toggle{right:22px}.exit-btn{right:78px;color:var(--red);border-color:rgba(248,113,113,.3)}
-.settings-toggle:hover,.exit-btn:hover{transform:scale(1.07);color:var(--text)}
+/* ===== FLOATING ACTION STACK ===== */
+.fab-stack{position:fixed;right:22px;bottom:22px;z-index:60;display:flex;flex-direction:column;gap:12px;align-items:flex-end}
+.settings-toggle{
+  width:52px;height:52px;border-radius:16px;border:1px solid var(--border);
+  background:rgba(18,18,42,.92);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:1.25rem;color:var(--soft);backdrop-filter:blur(12px);box-shadow:var(--shadow);transition:.18s
+}
+.settings-toggle:hover{transform:translateY(-2px) scale(1.04);color:#fff;border-color:var(--violet)}
+.exit-btn{
+  display:inline-flex;align-items:center;gap:10px;padding:14px 20px;border-radius:16px;
+  border:1px solid rgba(248,113,113,.45);
+  background:linear-gradient(135deg,rgba(248,113,113,.22),rgba(127,29,29,.55));
+  color:#fecaca;font:inherit;font-size:.92rem;font-weight:800;letter-spacing:.02em;
+  cursor:pointer;backdrop-filter:blur(12px);
+  box-shadow:0 10px 32px rgba(248,113,113,.25),0 0 0 1px rgba(248,113,113,.1);
+  transition:.18s;min-width:148px;justify-content:center
+}
+.exit-btn:hover{transform:translateY(-2px) scale(1.03);background:linear-gradient(135deg,rgba(248,113,113,.35),rgba(153,27,27,.7));color:#fff;box-shadow:0 14px 36px rgba(248,113,113,.4)}
+.exit-btn .exit-ico{font-size:1.15rem}
+.exit-btn .exit-sub{display:block;font-size:.62rem;font-weight:600;opacity:.8;letter-spacing:.04em;text-transform:uppercase}
 .loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--muted)}
 .spinner{width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--violet);border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -85,19 +124,51 @@ body{
 .chip:hover{color:var(--text);border-color:var(--violet)}
 .chip.active{background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(167,139,250,.25));color:#fff;border-color:rgba(167,139,250,.55);box-shadow:0 0 16px rgba(167,139,250,.2)}
 .refresh-btn{display:inline-flex;align-items:center;gap:6px;margin:0 auto 14px;padding:8px 16px;border-radius:999px;border:1px solid rgba(129,140,248,.35);background:rgba(99,102,241,.12);color:#c7d2fe;font-weight:700;font-size:.8rem;cursor:pointer}
+/* ===== DEEP METRICS (modern) ===== */
 .deep-section{margin-top:18px}
-.deep-section h3{color:var(--soft);font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
-.deep-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
-.metric-card{background:rgba(8,8,18,.85);border:1px solid var(--border2);border-radius:var(--rsm);padding:14px;text-align:center}
-.metric-value{font-size:1.25rem;font-weight:800}.metric-label{font-size:.68rem;color:var(--muted);margin-top:3px}
+.deep-section h3{color:var(--soft);font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.deep-section h3::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--grad);box-shadow:0 0 10px rgba(167,139,250,.5)}
+.deep-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px}
+.metric-card{
+  position:relative;overflow:hidden;background:linear-gradient(160deg,rgba(14,14,30,.95),rgba(8,8,18,.98));
+  border:1px solid rgba(99,102,241,.18);border-radius:16px;padding:16px 12px 14px;text-align:center;
+  transition:.18s
+}
+.metric-card::before{content:'';position:absolute;inset:0 0 auto 0;height:2px;background:var(--grad);opacity:.55}
+.metric-card:hover{border-color:rgba(167,139,250,.4);transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.3)}
+.metric-ico{font-size:1rem;margin-bottom:6px;opacity:.9;filter:drop-shadow(0 0 8px rgba(167,139,250,.25))}
+.metric-value{font-size:1.35rem;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.metric-label{font-size:.68rem;color:var(--muted);margin-top:5px;text-transform:uppercase;letter-spacing:.05em}
 .metric-card.orange .metric-value{color:var(--orange)}.metric-card.blue .metric-value{color:var(--blue)}
 .metric-card.green .metric-value{color:var(--green)}.metric-card.red .metric-value{color:var(--red)}
-.metric-bar{height:4px;border-radius:2px;background:var(--border2);margin-top:6px;overflow:hidden}
-.metric-bar-fill{height:100%;border-radius:2px}
+.metric-card.muted .metric-value{color:var(--muted);font-size:1.1rem;font-weight:700}
+.metric-bar{height:4px;border-radius:2px;background:var(--border2);margin-top:8px;overflow:hidden}
+.metric-bar-fill{height:100%;border-radius:2px;background:var(--grad)}
+/* ===== BADGES / MATCH ROW ===== */
 .session-badge{font-size:.68rem;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--border2);color:var(--soft)}
-.badge-active{color:var(--green)}.badge-completed{color:var(--muted)}
-.match-row{cursor:pointer}.match-row:hover{background:rgba(255,255,255,.03)}
-.match-detail-popup{display:none;background:rgba(8,8,18,.9);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-top:8px;width:100%}
+.badge-active{color:var(--green);border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.08)}
+.badge-completed{color:var(--muted)}
+.stat-pill{
+  display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(99,102,241,.18);
+  font-size:.72rem;font-weight:700;color:var(--soft)
+}
+.stat-pill b{color:var(--text);font-weight:800}
+.stat-pill.g{border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.08)}
+.stat-pill.b{border-color:rgba(56,189,248,.25);background:rgba(56,189,248,.08)}
+.stat-pill.o{border-color:rgba(251,146,60,.25);background:rgba(251,146,60,.08)}
+.stat-pill.r{border-color:rgba(248,113,113,.25);background:rgba(248,113,113,.08)}
+.match-row{
+  cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:10px 14px;align-items:center;
+  padding:14px 12px;margin-top:8px;border-radius:14px;border:1px solid rgba(99,102,241,.12);
+  background:linear-gradient(135deg,rgba(16,16,34,.7),rgba(10,10,22,.85));transition:.15s
+}
+.match-row:hover{border-color:rgba(167,139,250,.35);background:linear-gradient(135deg,rgba(24,24,48,.85),rgba(14,14,30,.95));transform:translateX(2px)}
+.match-row .score{font-size:1.2rem;font-weight:800;letter-spacing:-.02em}
+.match-row .result-win{color:var(--green);font-weight:800;letter-spacing:.04em}
+.match-row .result-loss{color:var(--red);font-weight:800;letter-spacing:.04em}
+.match-row .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.match-detail-popup{display:none;grid-column:1/-1;background:rgba(8,8,18,.92);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-top:4px}
 .match-detail-popup.show{display:block;animation:in .2s ease}
 .toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:999px;padding:10px 22px;font-size:.84rem;font-weight:700;z-index:200;box-shadow:var(--shadow)}
 .grade-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;font-weight:800;font-size:.9rem;color:#041018}
@@ -111,25 +182,36 @@ body{
 .cat{background:rgba(8,8,18,.8);border:1px solid var(--border2);border-radius:12px;padding:12px}
 .cat .s{font-size:1.4rem;font-weight:800}.cat .n{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .trend-up{color:var(--green)}.trend-down{color:var(--red)}.trend-flat{color:var(--muted)}
+.wl-line{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;font-size:.88rem}
+.wl-line .w{color:var(--green);font-weight:800}.wl-line .l{color:var(--red);font-weight:800}
 @media(max-width:560px){
   .nav{flex-wrap:wrap;border-radius:18px}.nav-btn{flex:1 1 40%;border-radius:14px}
-  .header h1{font-size:1.6rem}
+  .header h1{font-size:1.55rem}
+  .exit-btn{min-width:0;padding:12px 14px;font-size:.82rem}
+  .match-row{grid-template-columns:1fr}
 }
+
 </style>
 </head>
 <body>
-<div class="listener-bar"><div class="dot dot-off" id="listener-dot"></div><span id="listener-msg">Auto-tracker: not running</span></div>
+<div class="listener-wrap">
+  <div class="listener-bar state-off" id="listener-bar">
+    <div class="dot dot-off" id="listener-dot"></div>
+    <span class="status-text" id="listener-msg">Auto-tracker: not running</span>
+    <span class="status-chip" id="listener-chip">IDLE</span>
+  </div>
+</div>
 <div class="header">
   <img src="logo.png" class="header-logo" alt="RL Tracker">
   <h1>Rocket League <span class="accent">Tracker</span></h1>
   <p class="subtitle">Starlight edition · track the grind, share the session</p>
-  <p class="version">RL Tracker 3.0.0 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
+  <p class="version">RL Tracker 3.0.1 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
 </div>
 <nav class="nav">
-  <button class="nav-btn active" data-tab="active-session"><img src="icons/session.png" alt="">Session</button>
-  <button class="nav-btn" data-tab="history"><img src="icons/history.png" alt="">History</button>
-  <button class="nav-btn" data-tab="stats"><img src="icons/stats.png" alt="">Stats</button>
-  <button class="nav-btn" data-tab="coach"><img src="icons/coach.png" alt="">Coach</button>
+  <button class="nav-btn active" data-tab="active-session"><span class="ni"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M14 10h4M14 14h4"/></svg></span>Session</button>
+  <button class="nav-btn" data-tab="history"><span class="ni"><svg viewBox="0 0 24 24"><path d="M4 4h12v16H4z"/><path d="M8 8h4M8 12h6M8 16h5"/><path d="M16 8h4v12h-4"/></svg></span>History</button>
+  <button class="nav-btn" data-tab="stats"><span class="ni"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Stats</button>
+  <button class="nav-btn" data-tab="coach"><span class="ni"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 4a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3M17 4a3 3 0 0 1 3 3v1a3 3 0 0 1-3 3"/></svg></span>Coach</button>
 </nav>
 <div class="container">
   <div class="panel active" id="panel-active-session"><div id="active-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
@@ -138,8 +220,13 @@ body{
   <div class="panel" id="panel-coach"><div id="coach-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
 </div>
 <div id="toast-container"></div>
-<button class="settings-toggle" onclick="toggleSettings()" title="Settings">⚙️</button>
-<button class="exit-btn" onclick="exitTracker()" title="Exit">⏻</button>
+<div class="fab-stack">
+  <button class="exit-btn" onclick="exitTracker()" title="Fully quit RL Tracker (not just the browser tab)">
+    <span class="exit-ico">⏻</span>
+    <span><span>Exit tracker</span><span class="exit-sub">closes app</span></span>
+  </button>
+  <button class="settings-toggle" onclick="toggleSettings()" title="Settings">⚙️</button>
+</div>
 <div class="modal-overlay" id="settings-modal" style="display:none"><div class="modal">
   <h3 style="margin-bottom:14px">⚙️ Settings</h3>
   <label style="display:block;color:var(--soft);font-size:.8rem;margin-bottom:4px">Your Rocket League Name</label>
@@ -164,7 +251,7 @@ async function api(url,opts={}){const r=await fetch(url,{headers:{'Content-Type'
 function showToast(m){const e=document.createElement('div');e.className='toast';e.textContent=m;document.getElementById('toast-container').appendChild(e);setTimeout(()=>e.remove(),3200)}
 function formatDate(iso){try{return new Date(iso).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return iso}}
 function relativeTime(iso){const d=new Date(iso),n=new Date(),diff=Math.floor((n-d)/1000);if(diff<60)return'just now';if(diff<3600)return Math.floor(diff/60)+'m ago';if(diff<86400)return Math.floor(diff/3600)+'h ago';return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
-function matchBadges(s){return`<span class="session-badge">⚽ ${s.goals||0}</span> <span class="session-badge">🎯 ${s.shots||0}</span> <span class="session-badge">🛡️ ${s.saves||0}</span> <span class="session-badge">💥 ${s.demos_given||0}</span>`}
+function matchBadges(s){return`<span class="stat-pill g">⚽ <b>${s.goals||0}</b></span><span class="stat-pill b">🎯 <b>${s.shots||0}</b></span><span class="stat-pill o">🛡️ <b>${s.saves||0}</b></span><span class="stat-pill r">💥 <b>${s.demos_given||0}</b></span>`}
 function gradeColor(g){g=(g||'').toUpperCase();if(g.startsWith('A'))return'var(--green)';if(g.startsWith('B'))return'var(--cyan)';if(g.startsWith('C'))return'var(--orange)';return'var(--red)'}
 function trendIcon(t){return t==='up'?'↑':t==='down'?'↓':'→'}
 function trendClass(t){return t==='up'?'trend-up':t==='down'?'trend-down':'trend-flat'}
@@ -205,12 +292,15 @@ function renderActiveSession(s){
         <button class="btn btn-ghost" onclick="showCoachReport(${s.id})">🏆 Coach report</button>
       </div>
       <div id="session-coach-box"></div>`;
-    h+=ms.map(m=>`<div class="match-row" onclick="toggleMatchDetail(${m.id},this)" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap">
-      <span style="font-weight:600">Match</span>
-      <span style="font-size:1.05rem;font-weight:800">${m.user_score} - ${m.opponent_score}</span>
-      <span style="color:${m.result==='win'?'var(--green)':'var(--red)'};font-weight:700">${(m.result||'').toUpperCase()}</span>
-      <span style="font-size:.72rem;color:var(--muted)">${m.playlist||''}</span>
-      <span style="font-size:.72rem">${matchBadges(m)}</span>
+    h+=ms.map((m,i)=>`<div class="match-row" onclick="toggleMatchDetail(${m.id},this)">
+      <div><div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Match ${i+1}</div>
+        <div class="score">${m.user_score} – ${m.opponent_score}</div></div>
+      <div class="meta">
+        <span class="${m.result==='win'?'result-win':'result-loss'}">${(m.result||'').toUpperCase()}</span>
+        <span class="session-badge">${m.playlist||'Unknown'}</span>
+        ${matchBadges(m)}
+      </div>
+      <div style="color:var(--muted);font-size:.75rem">details</div>
       <div class="match-detail-popup"></div></div>`).join('');
   }else h+=`<div class="empty-state" style="padding:18px"><p>No matches yet. Play a game!</p></div>`;
   h+=`</div>`;document.getElementById('active-content').innerHTML=h;
@@ -249,11 +339,16 @@ async function toggleSessionExpand(sid){
   e.classList.add('open');e.innerHTML='<div class="loading" style="padding:12px"><div class="spinner"></div></div>';
   try{
     const s=await api('/api/sessions/'+sid),ms=s.matches||[];
-    let h=ms.length?ms.map((m,i)=>`<div class="match-row" onclick="toggleMatchDetail(${m.id},this)" style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--border);flex-wrap:wrap;align-items:center">
-      <span>Match ${i+1}</span><span>${m.user_score}-${m.opponent_score}</span>
-      <span style="color:${m.result==='win'?'var(--green)':'var(--red)'};font-weight:700">${(m.result||'').toUpperCase()}</span>
-      <span style="font-size:.72rem;color:var(--muted)">${m.playlist||''}</span>
-      <span style="font-size:.72rem">${matchBadges(m)}</span><div class="match-detail-popup"></div></div>`).join(''):'<p style="color:var(--muted);padding:10px;text-align:center">No matches</p>';
+    let h=ms.length?ms.map((m,i)=>`<div class="match-row" onclick="toggleMatchDetail(${m.id},this)">
+      <div><div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Match ${i+1}</div>
+        <div class="score">${m.user_score} – ${m.opponent_score}</div></div>
+      <div class="meta">
+        <span class="${m.result==='win'?'result-win':'result-loss'}">${(m.result||'').toUpperCase()}</span>
+        <span class="session-badge">${m.playlist||'Unknown'}</span>
+        ${matchBadges(m)}
+      </div>
+      <div style="color:var(--muted);font-size:.75rem">tap for details</div>
+      <div class="match-detail-popup"></div></div>`).join(''):'<p style="color:var(--muted);padding:10px;text-align:center">No matches</p>';
     h+=`<div class="actions"><button class="btn btn-share" onclick="shareSessionCard(${sid})">✨ Share card</button>
       <button class="btn btn-ghost" onclick="downloadSessionCsv(${sid})">⬇️ CSV</button>
       <button class="btn btn-ghost" onclick="showCoachReport(${sid},'expand-coach-${sid}')">🏆 Coach</button>
@@ -267,13 +362,14 @@ async function loadSessionDeepStats(sid){
   try{
     const deep=await api('/api/sessions/'+sid+'/deep');const a=deep.aggregates||{};if(!a.total_matches){c.innerHTML='';return}
     const fg=a.all_time_fastest_goal||0,asp=a.overall_avg_shot_power||0;
-    c.innerHTML=`<div class="deep-section"><h3>📊 Session deep stats</h3><div class="deep-metrics">
-      <div class="metric-card orange"><div class="metric-value">${fg>0?Number(fg).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Fastest Goal</div></div>
-      <div class="metric-card blue"><div class="metric-value">${asp>0?Number(asp).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Avg Shot Power</div></div>
-      <div class="metric-card green"><div class="metric-value">${a.shot_accuracy||0}%</div><div class="metric-label">Accuracy</div></div>
-      <div class="metric-card"><div class="metric-value">${a.total_shots||0}</div><div class="metric-label">Shots</div></div>
-      <div class="metric-card"><div class="metric-value">${a.avg_wall_time||0}%</div><div class="metric-label">Wall</div></div>
-      <div class="metric-card green"><div class="metric-value">${a.total_goals||0}</div><div class="metric-label">Goals</div></div>
+    const mv=(ico,val,label,cls='')=>`<div class="metric-card ${cls||''}"><div class="metric-ico">${ico}</div><div class="metric-value">${val}</div><div class="metric-label">${label}</div></div>`;
+    c.innerHTML=`<div class="deep-section"><h3>Session deep stats</h3><div class="deep-metrics">
+      ${mv('🚀', fg>0?Number(fg).toFixed(1)+' km/h':'—', 'Fastest Goal', fg>0?'orange':'muted')}
+      ${mv('💥', asp>0?Number(asp).toFixed(1)+' km/h':'—', 'Avg Shot Power', asp>0?'blue':'muted')}
+      ${mv('🎯', (a.shot_accuracy||0)+'%', 'Accuracy', 'green')}
+      ${mv('📡', a.total_shots||0, 'Shots', 'blue')}
+      ${mv('🧱', (a.avg_wall_time||0)+'%', 'Wall', (a.avg_wall_time||0)>0?'':'muted')}
+      ${mv('⚽', a.total_goals||0, 'Goals', 'green')}
     </div></div>`;
   }catch(e){c.innerHTML=''}
 }
@@ -326,25 +422,29 @@ async function loadDeepStats(qs=''){
   try{
     const deep=await api('/api/stats/deep'+qs);const a=deep.aggregates||{};if(!a.total_matches){c.innerHTML='';return}
     const n1=v=>Number(v||0);const fg=a.all_time_fastest_goal||0,asp=a.overall_avg_shot_power||0,sa=a.shot_accuracy||0;
-    c.innerHTML=`<div class="deep-section"><h3>🎯 Shot Power & Accuracy</h3><div class="deep-metrics">
-      <div class="metric-card orange"><div class="metric-value">${fg>0?n1(fg).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Fastest Goal</div></div>
-      <div class="metric-card blue"><div class="metric-value">${asp>0?n1(asp).toFixed(1)+' km/h':'—'}</div><div class="metric-label">Avg Shot Power</div></div>
-      <div class="metric-card green"><div class="metric-value">${sa}%</div><div class="metric-label">Shot Accuracy</div><div class="metric-bar"><div class="metric-bar-fill" style="width:${Math.min(sa,100)}%;background:var(--green)"></div></div></div>
-      <div class="metric-card"><div class="metric-value">${a.total_shots||0}</div><div class="metric-label">Total Shots</div></div></div></div>
-      <div class="deep-section"><h3>⛽ Movement & Boost</h3><div class="deep-metrics">
-      <div class="metric-card blue"><div class="metric-value">${a.avg_boost||0}%</div><div class="metric-label">Avg Boost</div></div>
-      <div class="metric-card"><div class="metric-value">${a.avg_boost_time||0}%</div><div class="metric-label">Time Boosting</div></div>
-      <div class="metric-card orange"><div class="metric-value">${a.avg_supersonic_time||0}%</div><div class="metric-label">Supersonic</div></div>
-      <div class="metric-card"><div class="metric-value">${a.avg_air_time||0}%</div><div class="metric-label">Air</div></div>
-      <div class="metric-card"><div class="metric-value">${a.avg_ground_time||0}%</div><div class="metric-label">Ground</div></div>
-      <div class="metric-card blue"><div class="metric-value">${a.avg_wall_time||0}%</div><div class="metric-label">Wall</div></div></div></div>
-      <div class="deep-section"><h3>💥 Combat & Ball</h3><div class="deep-metrics">
-      <div class="metric-card green"><div class="metric-value">${a.total_demos_given||0}</div><div class="metric-label">Demos Given</div></div>
-      <div class="metric-card red"><div class="metric-value">${a.total_demos_taken||0}</div><div class="metric-label">Demos Taken</div></div>
-      <div class="metric-card"><div class="metric-value">${a.total_saves||0}</div><div class="metric-label">Saves</div></div>
-      <div class="metric-card"><div class="metric-value">${a.total_overtime||0}</div><div class="metric-label">Overtimes</div></div>
-      <div class="metric-card"><div class="metric-value">${a.total_touches||0}</div><div class="metric-label">Touches</div></div>
-      <div class="metric-card green"><div class="metric-value">${a.total_goals||0}</div><div class="metric-label">Goals</div></div></div></div>`;
+    const mv=(ico,val,label,cls='')=>`<div class="metric-card ${cls}"><div class="metric-ico">${ico}</div><div class="metric-value">${val}</div><div class="metric-label">${label}</div></div>`;
+    c.innerHTML=`<div class="deep-section"><h3>Shot Power & Accuracy</h3><div class="deep-metrics">
+      ${mv('🚀', fg>0?n1(fg).toFixed(1)+' km/h':'—','Fastest Goal',fg>0?'orange':'muted')}
+      ${mv('💥', asp>0?n1(asp).toFixed(1)+' km/h':'—','Avg Shot Power',asp>0?'blue':'muted')}
+      ${mv('🎯', sa+'%','Accuracy','green')}
+      ${mv('📡', a.total_shots||0,'Total Shots','blue')}
+    </div></div>
+    <div class="deep-section"><h3>Movement & Boost</h3><div class="deep-metrics">
+      ${mv('⛽', (a.avg_boost||0)+'%','Avg Boost','blue')}
+      ${mv('🔋', (a.avg_boost_time||0)+'%','Boosting','')}
+      ${mv('⚡', (a.avg_supersonic_time||0)+'%','Supersonic','orange')}
+      ${mv('✈️', (a.avg_air_time||0)+'%','Air','')}
+      ${mv('🛣️', (a.avg_ground_time||0)+'%','Ground','')}
+      ${mv('🧱', (a.avg_wall_time||0)+'%','Wall',(a.avg_wall_time||0)>0?'blue':'muted')}
+    </div></div>
+    <div class="deep-section"><h3>Combat & Ball</h3><div class="deep-metrics">
+      ${mv('💥', a.total_demos_given||0,'Demos Given','green')}
+      ${mv('💀', a.total_demos_taken||0,'Demos Taken','red')}
+      ${mv('🛡️', a.total_saves||0,'Saves','')}
+      ${mv('⏱️', a.total_overtime||0,'Overtimes','')}
+      ${mv('✋', a.total_touches||0,'Touches','')}
+      ${mv('⚽', a.total_goals||0,'Goals','green')}
+    </div></div>`;
   }catch(e){c.innerHTML='<p style="color:var(--red);text-align:center">Deep stats unavailable</p>'}
 }
 
@@ -451,7 +551,19 @@ async function toggleMatchDetail(mid,el){
   }catch(e){popup.innerHTML=`<p style="color:var(--red)">${e.message}</p>`}
 }
 function pollListenerStatus(){api('/api/listener-status').then(s=>updateListenerUI(s)).catch(()=>updateListenerUI({state:'not_running'}))}
-function updateListenerUI(s){const d=document.getElementById('listener-dot'),m=document.getElementById('listener-msg');d.className='dot';switch(s.state){case'connected':d.classList.add('dot-live');m.textContent='🟢 Live — auto-tracking matches';break;case'connecting':case'starting':d.classList.add('dot-connecting');m.textContent='🟡 Connecting...';break;case'no_player':d.classList.add('dot-off');m.textContent='⚙️ Player name not set — open Settings';break;case'disconnected':d.classList.add('dot-off');m.textContent='⚫ RL not running (port 49123 closed)';break;default:d.classList.add('dot-off');m.textContent='Auto-tracker: '+(s.message||s.state||'unknown')}}
+function updateListenerUI(s){
+  const d=document.getElementById('listener-dot'),m=document.getElementById('listener-msg');
+  const bar=document.getElementById('listener-bar'),chip=document.getElementById('listener-chip');
+  d.className='dot';bar.className='listener-bar';
+  const set=(dot,state,text,chipText)=>{d.classList.add(dot);bar.classList.add(state);m.textContent=text;if(chip)chip.textContent=chipText};
+  switch(s.state){
+    case'connected':set('dot-live','state-live','Live — auto-tracking matches','LIVE');break;
+    case'connecting':case'starting':set('dot-connecting','state-connecting','Connecting to Rocket League...','WAIT');break;
+    case'no_player':set('dot-off','state-off','Player name not set — open Settings','SETUP');break;
+    case'disconnected':set('dot-off','state-off','RL not running (port 49123 closed)','OFF');break;
+    default:set('dot-off','state-off',s.message||s.state||'unknown','—');
+  }
+}
 function toggleSettings(){const m=document.getElementById('settings-modal');if(m.style.display==='flex'){m.style.display='none';return}api('/api/config').then(c=>{document.getElementById('cfg-player-name').value=c.name||'';document.getElementById('cfg-friends').value=(c.friends||[]).join('\\n')}).catch(()=>{});m.style.display='flex';checkRlConfig()}
 async function saveSettings(){const n=document.getElementById('cfg-player-name').value.trim(),fr=document.getElementById('cfg-friends').value.trim(),fs=fr?fr.split('\n').map(f=>f.trim()).filter(Boolean):[];try{await api('/api/config',{method:'POST',body:JSON.stringify({name:n,friends:fs})});showToast('✅ Settings saved');toggleSettings();setTimeout(pollListenerStatus,2000)}catch(e){showToast('❌ '+e.message)}}
 async function checkRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Checking...';try{const s=await api('/api/rl-config');if(!s.config_dir_found){b.textContent='❌ Not Found';m.textContent='RL Config folder not found'}else if(!s.ini_exists){b.textContent='⚠️ Missing';m.textContent='TAStatsAPI.ini missing — Auto-Create'}else if(!s.ini_correct){b.textContent='⚠️ Wrong';m.textContent='INI incomplete — Auto-Create'}else{b.textContent='✅ OK';m.textContent=s.ini_read_by_rl?'INI OK (RL has read it)':'INI OK — restart RL if port closed'}}catch(e){b.textContent='❌';m.textContent=e.message}}
