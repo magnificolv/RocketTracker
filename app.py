@@ -17,7 +17,7 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data-v2.db"
 
 # v1.1: Auto-update check against GitHub releases.
-APP_VERSION = "2.0.15"
+APP_VERSION = "2.0.16"
 GITHUB_REPO = "magnificolv/RocketTracker"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -30,6 +30,10 @@ def cors(r):
     r.headers["Access-Control-Allow-Origin"] = "*"
     r.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
     r.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    # Dev/portable: avoid stale dashboard after One-Click Update
+    r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    r.headers["Pragma"] = "no-cache"
+    r.headers["Expires"] = "0"
     return r
 
 def load_config():
@@ -84,10 +88,64 @@ def session_detail(sid):
         return jsonify({"deleted": True})
     s = conn.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
     if not s: conn.close(); return jsonify({"error": "Not found"}), 404
-    ms = conn.execute("SELECT * FROM matches WHERE session_id=? ORDER BY played_at ASC", (sid,)).fetchall()
+    # JOIN matches_summary so Active Session / History badges get goals/shots/saves/demos
+    ms = conn.execute(
+        """SELECT m.*,
+                  COALESCE(sm.goals, m.user_score, 0) AS goals,
+                  COALESCE(sm.shots, 0) AS shots,
+                  COALESCE(sm.saves, 0) AS saves,
+                  COALESCE(sm.demos_given, 0) AS demos_given,
+                  COALESCE(sm.demos_taken, 0) AS demos_taken,
+                  sm.highlight_icon, sm.highlight_text, sm.highlight_value, sm.arena
+           FROM matches m
+           LEFT JOIN matches_summary sm ON sm.match_id = m.id
+           WHERE m.session_id=?
+           ORDER BY m.played_at ASC""",
+        (sid,),
+    ).fetchall()
     conn.close()
     r = dict(s); r["matches"] = [dict(m) for m in ms]; r["wins"] = sum(1 for m in ms if m["result"]=="win"); r["losses"] = sum(1 for m in ms if m["result"]=="loss")
     return jsonify(r)
+
+@app.route("/api/sessions/<int:sid>/deep")
+def session_deep_stats(sid):
+    """Per-session aggregate deep stats for History expand."""
+    conn = get_db()
+    md = conn.execute(
+        """
+        SELECT
+            COUNT(*) as total_matches,
+            SUM(touches) as total_touches,
+            SUM(car_touches) as total_car_touches,
+            SUM(shots) as total_shots,
+            SUM(saves) as total_saves,
+            SUM(assists) as total_assists,
+            SUM(demos_given) as total_demos_given,
+            SUM(demos_taken) as total_demos_taken,
+            SUM(overtime) as total_overtime,
+            ROUND(AVG(boost_avg), 1) as avg_boost,
+            ROUND(AVG(boost_time_pct), 1) as avg_boost_time,
+            ROUND(AVG(supersonic_time_pct), 1) as avg_supersonic_time,
+            ROUND(AVG(air_time_pct), 1) as avg_air_time,
+            ROUND(AVG(ground_time_pct), 1) as avg_ground_time,
+            ROUND(AVG(wall_time_pct), 1) as avg_wall_time,
+            MAX(fastest_goal_kph) as all_time_fastest_goal,
+            ROUND(AVG(avg_shot_power), 1) as overall_avg_shot_power
+        FROM match_details WHERE match_id IN (SELECT id FROM matches WHERE session_id=?)
+        """,
+        (sid,),
+    ).fetchone()
+    total_user_goals = conn.execute(
+        "SELECT SUM(user_score) FROM matches WHERE session_id=?", (sid,)
+    ).fetchone()[0] or 0
+    conn.close()
+    a = dict(md) if md else {}
+    a["total_goals"] = total_user_goals
+    a["shot_accuracy"] = (
+        min(round(total_user_goals / max(a.get("total_shots") or 1, 1) * 100, 1), 100.0)
+        if total_user_goals > 0 else 0
+    )
+    return jsonify({"aggregates": {k: (v or 0) for k, v in a.items()}})
 
 @app.route("/api/sessions/<int:sid>/end", methods=["POST"])
 def end_session(sid):
@@ -385,7 +443,11 @@ def rl_config_status():
     cd = find_rl_config_dir(); r = {"config_dir_found": cd is not None, "ini_exists": False, "ini_correct": False}
     if cd:
         ip = cd / "TAStatsAPI.ini"; r["ini_exists"] = ip.exists()
-        if ip.exists(): r["ini_correct"] = "PacketSendRate=30" in ip.read_text()
+        if ip.exists():
+            txt = ip.read_text(encoding="utf-8", errors="replace")
+            # Both section header AND PacketSendRate required (wrong [System] section is a common fail)
+            r["ini_correct"] = ("TAGame.MatchStatsExporter_TA" in txt and "PacketSendRate=30" in txt)
+            r["ini_read_by_rl"] = "[IniVersion]" in txt
     return jsonify(r)
 
 @app.route("/api/rl-config", methods=["POST"])
@@ -413,7 +475,9 @@ def deep_stats():
             ROUND(AVG(boost_time_pct), 1) as avg_boost_time,
             ROUND(AVG(supersonic_time_pct), 1) as avg_supersonic_time,
             ROUND(AVG(air_time_pct), 1) as avg_air_time,
-            MAX(fastest_goal_kph) as all_time_fastest_goal,
+            ROUND(AVG(ground_time_pct), 1) as avg_ground_time,
+            ROUND(AVG(wall_time_pct), 1) as avg_wall_time,
+            ROUND(MAX(fastest_goal_kph), 1) as all_time_fastest_goal,
             ROUND(AVG(avg_shot_power), 1) as overall_avg_shot_power
         FROM match_details
     """).fetchone()

@@ -1,4 +1,4 @@
-# 🚀 Rocket League Match Tracker v2.0.11
+# 🚀 Rocket League Match Tracker v2.0.16
 
 <p align="center">
   <a href="https://github.com/magnificolv/RocketTracker/releases/latest"><img src="https://img.shields.io/github/v/release/magnificolv/RocketTracker?style=flat-square&label=version&color=blue" alt="Version"></a>
@@ -15,7 +15,7 @@
 <div align="center">
 
 <a href="https://github.com/magnificolv/RocketTracker/releases/latest">
-  <img src="https://img.shields.io/badge/⬇️%20DOWNLOAD%20v1.3.2-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download v1.3.2" height="56">
+  <img src="https://img.shields.io/badge/⬇️%20DOWNLOAD%20LATEST-brightgreen?style=for-the-badge&logo=windows&logoColor=white" alt="Download latest" height="56">
 </a>
 
 <br><sub>📦 Download ZIP → Extract to Desktop → Double-click → Play</sub>
@@ -49,68 +49,54 @@
 
 ## ✨ What It Tracks
 
-### 1. Download
-Get the latest `RL-Tracker-v2.0.11` from [Releases](https://github.com/magnificolv/RocketTracker/releases).
+Auto-tracks competitive Rocket League matches via the local Stats API:
 
-### 2. Run
-Double-click `RL-Tracker-v2.0.11`. A console window opens — **keep it running**.
-
-### 3. Open Dashboard
-Your browser opens automatically at `http://localhost:3010`.
-
-### 4. Set Your Player Name
-Click ⚙️ **Settings** → enter your Rocket League display name → **Save**.
-
-### 5. Launch Rocket League
-The tracker auto-connects. Status dot turns 🟢 green when tracking is live. Play a match — stats appear automatically!
-
-> **⚠️ First time?** After entering your name, restart Rocket League so the Stats API activates.
+- Win / loss, scores, overtime
+- Solo / duo mode (friend detection)
+- Shots, saves, assists, demos
+- Boost, air, ground, wall, supersonic time
+- Shot power + coach insights
+- Session history + all-time stats
 
 ---
 
 ## 🚀 Quick Start
 
-1. **Download** the [latest ZIP](https://github.com/magnificolv/RocketTracker/releases/latest) (~13 MB)
-2. **Extract** to your Desktop — keep the `RL-Tracker\` folder together, don't move the .exe out
-3. **Double-click** `RL-Tracker-v1.3.2.exe` — a console window opens, your browser opens the dashboard at `http://localhost:3010`
-4. **Enter your name** in ⚙️ Settings → click **Auto-Create** → restart Rocket League → play!
+1. **Download** the [latest ZIP](https://github.com/magnificolv/RocketTracker/releases/latest)
+2. **Extract** to your Desktop — keep the `RL-Tracker\` folder together
+3. **Double-click** `RL-Tracker-v2.0.16.exe` — browser opens `http://localhost:3010`
+4. **Enter your name** in ⚙️ Settings → **Auto-Create** → restart Rocket League → play!
 
-> 💡 First time? Auto-Create sets up everything automatically. Just restart RL once.
+> 💡 First time? Auto-Create sets up the Stats API config. Restart RL once so it takes effect.
 
 ---
 
 ## 🔧 Troubleshooting
 
 **Tracker shows "RL not running" but RL IS running?**  
-Click ⚙️ Settings → **🔍 Diagnose**. It checks your config, port, and running processes, then tells you exactly what to fix.
+Settings → Auto-Create, then fully quit and relaunch Rocket League.
 
 **Using WSL2 / Docker Desktop?**  
-WSL2 can silently intercept port 49123. Quick fix: run `wsl --shutdown` in PowerShell. Permanent fix: add `ignoredPorts=49123` to `%USERPROFILE%\.wslconfig` under `[wsl2]`.
+WSL2 can intercept port 49123. Quick fix: `wsl --shutdown`. Permanent: add `ignoredPorts=49123` under `[wsl2]` in `%USERPROFILE%\.wslconfig`.
 
 **Windows Defender flags the .exe?**  
-False positive — the file is unsigned. Click `Keep anyway` in your browser, or restore from Windows Security → Protection history.
+False positive on unsigned portable apps. Choose *Keep anyway* / restore from Protection history.
 
 ---
 
 ## 🔄 Auto-Update
 
-| Problem | Fix |
-|---------|-----|
-| Status stays ⚫ grey | Make sure Rocket League is running AND you're in a match (not main menu) |
-| No stats appear | Check your player name matches exactly in Settings |
-| Port 3010 already in use | Close other instances of the tracker first |
-| .exe crashes immediately | Try running as Administrator (RL config folder may need permissions) |
+Open ⚙️ Settings → **Check for Updates** → **One-Click Update**.  
+Your `data-v2.db` and `config.yaml` are preserved.
 
 ---
 
 ## 🛠️ For Friends
 
-1. Download `RL-Tracker-v2.0.11`
-2. Double-click to run
-3. Enter YOUR Rocket League display name in Settings
-4. Play!
-
-Each player needs their own `config.yaml` with their name. The tracker auto-creates the Stats API config in your RL folder.
+1. Download latest release ZIP
+2. Extract and run the `.exe`
+3. Enter **your** Rocket League display name
+4. Play — each person keeps their own stats DB
 
 ---
 
@@ -118,16 +104,17 @@ Each player needs their own `config.yaml` with their name. The tracker auto-crea
 
 | Version | Date | Changes |
 |---------|------|---------|
-| **v2.0.11** | Jun 28, 2026 | Bugfix: SPECTATOR skip invalid TeamNum, Avg Shot Power rounding, saves tracking |
-| v9g | Jun 16, 2026 | Custom icon, all features stable |
-| v1-v8 | Jun 10-15, 2026 | Internal development (dedup, demolish tracking, deep stats, PyInstaller builds) |
+| **v2.0.16** | Aug 3, 2026 | Bugfixes: wall time, match dedup, session badges, duo late-join; visual upgrade; session deep stats |
+| v2.0.15 | Jul 1, 2026 | Scores from GoalScored only (no cumulative Teams[].Score) |
+| v2.0.14 | Jul 1, 2026 | OT score regression guard |
+| v2.0.13 | Jun 30, 2026 | Auto-update for source releases + session badge JOIN |
+| v2.0.12 | Jun 30, 2026 | Form dots chronological order |
+| v2.0.11 | Jun 28, 2026 | Badge undefined fix |
 
 ---
 
 <div align="center">
 
 Built with ❤️ by **Magnifico** & **Hermes AI Collective**
-
-[🐛 Report Bug](https://github.com/magnificolv/RocketTracker/issues) · [📦 All Releases](https://github.com/magnificolv/RocketTracker/releases) · [⭐ Star the repo](https://github.com/magnificolv/RocketTracker/stargazers)
 
 </div>

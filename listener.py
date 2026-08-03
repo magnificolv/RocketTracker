@@ -10,7 +10,7 @@ import sqlite3
 import socket
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Active Coach (TRIZ #25): analyse each match right after recording it.
@@ -440,10 +440,11 @@ class MatchState:
                     self.boosting_ticks += 1
                 if p.get("bSupersonic"):
                     self.supersonic_ticks += 1
-                if p.get("bOnGround"):
-                    self.on_ground_ticks += 1
-                elif p.get("bOnWall"):
+                # Wall before ground: RL often sets BOTH True on walls.
+                if p.get("bOnWall"):
                     self.on_wall_ticks += 1
+                elif p.get("bOnGround"):
+                    self.on_ground_ticks += 1
                 else:
                     self.in_air_ticks += 1
 
@@ -459,6 +460,22 @@ class MatchState:
                     self._was_demolished = True
                 else:
                     self._was_demolished = False
+
+                # Duo re-check every tick (friend may join / appear after lock)
+                if self.mode == "solo" and self._friend_cache and players:
+                    pname = (self.player_name or "").lower().strip()
+                    for fp in players:
+                        if fp.get("TeamNum") != self.user_team_num:
+                            continue
+                        fpname = (fp.get("Name") or "").lower().strip()
+                        if not fpname:
+                            continue
+                        if pname and (pname == fpname or pname in fpname or fpname in pname):
+                            continue
+                        if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
+                            self.mode = "duo"
+                            log(f"Duo detected (late join): {fp.get('Name')}")
+                            break
 
         # Match end detection (only check if player found)
         if self.user_team_num is not None and game.get("bHasWinner") and not self._match_recorded:
@@ -494,10 +511,13 @@ class MatchState:
         session = db.execute("SELECT id FROM sessions WHERE status='active' ORDER BY started_at DESC LIMIT 1").fetchone()
         if session:
             session_id = session["id"]
-            # Dedup: skip if same scores already recorded in last 60s
+            # Dedup: skip if same scores already recorded in last 60s.
+            # played_at is ISO-8601 (…T…); SQLite datetime('now') uses a space
+            # separator, so lexicographic compare fails. Use Python ISO cutoff.
+            cutoff = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
             existing = db.execute(
-                "SELECT id FROM matches WHERE session_id=? AND user_score=? AND opponent_score=? AND played_at > datetime('now', '-60 seconds')",
-                (session_id, self.user_score, self.opponent_score)
+                "SELECT id FROM matches WHERE session_id=? AND user_score=? AND opponent_score=? AND played_at > ?",
+                (session_id, self.user_score, self.opponent_score, cutoff)
             ).fetchone()
             if existing:
                 log(f"SKIP DUP: match already recorded (id={existing['id']})")
