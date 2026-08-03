@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RL Tracker 3.0.2 · Starlight</title>
+<title>RL Tracker 3.0.3 · Starlight</title>
 <style>
 
 :root{
@@ -231,7 +231,7 @@ body{
   <img src="logo.png" class="header-logo" alt="RL Tracker">
   <h1>Rocket League <span class="accent">Tracker</span></h1>
   <p class="subtitle">Starlight edition · track the grind, share the session</p>
-  <p class="version">RL Tracker 3.0.2 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
+  <p class="version">RL Tracker 3.0.3 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
 </div>
 <nav class="nav">
   <button class="nav-btn active" data-tab="active-session"><span class="ni"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M14 10h4M14 14h4"/></svg></span>Session</button>
@@ -653,10 +653,8 @@ function updateListenerUI(s){
     default:set('dot-off','state-off',s.message||s.state||'unknown','—');
   }
 }
-function toggleSettings(){const m=document.getElementById('settings-modal');if(m.style.display==='flex'){m.style.display='none';return}api('/api/config').then(c=>{document.getElementById('cfg-player-name').value=c.name||'';document.getElementById('cfg-friends').value=(c.friends||[]).join('
-')}).catch(()=>{});m.style.display='flex';checkRlConfig()}
-async function saveSettings(){const n=document.getElementById('cfg-player-name').value.trim(),fr=document.getElementById('cfg-friends').value.trim(),fs=fr?fr.split('
-').map(f=>f.trim()).filter(Boolean):[];try{await api('/api/config',{method:'POST',body:JSON.stringify({name:n,friends:fs})});showToast('Settings saved');toggleSettings();setTimeout(pollListenerStatus,2000)}catch(e){showToast('Error: '+e.message)}}
+function toggleSettings(){const m=document.getElementById('settings-modal');if(m.style.display==='flex'){m.style.display='none';return}api('/api/config').then(c=>{document.getElementById('cfg-player-name').value=c.name||'';document.getElementById('cfg-friends').value=(c.friends||[]).join('\n')}).catch(()=>{});m.style.display='flex';checkRlConfig()}
+async function saveSettings(){const n=document.getElementById('cfg-player-name').value.trim(),fr=document.getElementById('cfg-friends').value.trim(),fs=fr?fr.split('\n').map(f=>f.trim()).filter(Boolean):[];try{await api('/api/config',{method:'POST',body:JSON.stringify({name:n,friends:fs})});showToast('Settings saved');toggleSettings();setTimeout(pollListenerStatus,2000)}catch(e){showToast('Error: '+e.message)}}
 async function checkRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Checking...';try{const s=await api('/api/rl-config');if(!s.config_dir_found){b.textContent='Not Found';m.textContent='RL Config folder not found'}else if(!s.ini_exists){b.textContent='Missing';m.textContent='TAStatsAPI.ini missing — Auto-Create'}else if(!s.ini_correct){b.textContent='Wrong';m.textContent='INI incomplete — Auto-Create'}else{b.textContent='OK';m.textContent=s.ini_read_by_rl?'INI OK (RL has read it)':'INI OK — restart RL if port closed'}}catch(e){b.textContent='Error';m.textContent=e.message}}
 async function createRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');try{const r=await api('/api/rl-config',{method:'POST'});if(r.created){b.textContent='Created';m.textContent='Restart Rocket League fully';showToast('Restart RL')}else{b.textContent='Failed';m.textContent=r.message}}catch(e){b.textContent='Error';m.textContent=e.message}}
 async function exitTracker(){if(!confirm('Exit RL Tracker completely? (Closing the browser tab is not enough)'))return;try{await api('/api/quit',{method:'POST'})}catch(e){}showToast('Shutting down...');setTimeout(()=>window.close(),500)}
