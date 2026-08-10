@@ -5,6 +5,7 @@ Optimized for low-latency to prevent TCP backpressure on RL.
 """
 import json
 import os
+import re
 import select
 import sqlite3
 import socket
@@ -242,13 +243,14 @@ class MatchState:
                  '_prev_demos', '_was_demolished',
                  '_last_update_time', '_poll_interval', '_connected',
                  '_team_confirm_count', '_team_confirm_candidate',
-                 '_cross_check_fails')
+                 '_cross_check_fails', '_last_roster_log', '_name_miss_streak',
+                 '_spec_only_lock')
 
     def __init__(self, player_name, friend_names):
-        self.player_name = player_name.lower().strip()
-        self.friend_names = friend_names
+        self.player_name = (player_name or "").lower().strip()
+        self.friend_names = friend_names or []
         self._player_cache = {}  # {name_hash: result} for fast lookups
-        self._friend_cache = set(f.lower().strip() for f in friend_names if f.strip())
+        self._friend_cache = set(f.lower().strip() for f in self.friend_names if f and str(f).strip())
         self._match_recorded = False
         self._last_update_time = 0.0
         self._poll_interval = 60
@@ -256,6 +258,9 @@ class MatchState:
         self._team_confirm_count = 0
         self._team_confirm_candidate = None
         self._cross_check_fails = 0
+        self._last_roster_log = 0.0
+        self._name_miss_streak = 0
+        self._spec_only_lock = False
         self.reset()
 
     def reset(self):
@@ -288,11 +293,48 @@ class MatchState:
         self._team_confirm_count = 0
         self._team_confirm_candidate = None
         self._cross_check_fails = 0
+        self._name_miss_streak = 0
+        self._spec_only_lock = False
+
+    @staticmethod
+    def _norm_name(name):
+        """Normalize RL display names for matching (clan tags, spaces, punct)."""
+        if not name:
+            return ""
+        s = str(name).lower().strip()
+        # Strip common clan-tag prefixes: [TAG], (TAG), {TAG}, <TAG>
+        s = re.sub(r"^[\(\[\{<][^\)\]\}>]+[\)\]\}>]\s*", "", s)
+        # Keep alnum only for fuzzy compare
+        return "".join(ch for ch in s if ch.isalnum())
+
+    def set_player_identity(self, player_name, friend_names=None):
+        """Hot-reload Settings name/friends without restarting the listener."""
+        new_name = (player_name or "").lower().strip()
+        friends = friend_names if friend_names is not None else self.friend_names
+        new_friends = [f for f in (friends or []) if f and str(f).strip()]
+        new_cache = set(f.lower().strip() for f in new_friends)
+        changed = (new_name != self.player_name) or (new_cache != self._friend_cache)
+        if not changed:
+            return False
+        old = self.player_name
+        self.player_name = new_name
+        self.friend_names = new_friends
+        self._friend_cache = new_cache
+        self._player_cache.clear()
+        # Force re-detect team for the new identity (alt account switch)
+        self.user_team_num = None
+        self._team_confirm_count = 0
+        self._team_confirm_candidate = None
+        self._cross_check_fails = 0
+        self._name_miss_streak = 0
+        self._spec_only_lock = False
+        log(f"Config identity updated: '{old}' → '{new_name}' (friends={len(new_friends)}); team unlocked for re-detect")
+        return True
 
     def _fast_find(self, players, target):
         """Two-pass player lookup. Pass 1: exact (case-insensitive) match
         across the WHOLE Players list — wins regardless of iteration order.
-        Pass 2: partial-match fallback ONLY if no exact match exists.
+        Pass 2: normalized / partial-match fallback ONLY if no exact match exists.
 
         FIX (v1.0.8 team-swap bug): the old single-pass version tried exact
         then partial per-iteration, so a partial-match candidate earlier in
@@ -300,20 +342,96 @@ class MatchState:
         match later in the array (name 'Mag'), locking user_team_num to the
         WRONG team for the entire match and inverting every score/result.
         """
+        if not target:
+            return None
+        target_l = target.lower().strip()
+        target_n = self._norm_name(target_l)
         # Pass 1: exact match (case-insensitive)
         for p in players:
-            pname = p.get("Name", "")
-            if pname and pname.lower() == target:
+            pname = p.get("Name") or p.get("name") or ""
+            if pname and pname.lower() == target_l:
                 return p
-        # Pass 2: partial match fallback (only if NO exact match exists)
+        # Pass 2: normalized exact (strips clan tags / punctuation)
+        if target_n:
+            for p in players:
+                pname = p.get("Name") or p.get("name") or ""
+                if pname and self._norm_name(pname) == target_n:
+                    return p
+        # Pass 3: partial match fallback (only if NO exact match exists)
         for p in players:
-            pname = p.get("Name", "")
+            pname = p.get("Name") or p.get("name") or ""
             if not pname:
                 continue
             pname_l = pname.lower()
-            if target in pname_l or pname_l in target:
+            pname_n = self._norm_name(pname_l)
+            if (target_l in pname_l or pname_l in target_l
+                    or (target_n and pname_n and (target_n in pname_n or pname_n in target_n))):
                 return p
         return None
+
+    def _roster_summary(self, players):
+        parts = []
+        for p in players or []:
+            nm = p.get("Name") or p.get("name") or "?"
+            tn = p.get("TeamNum", "?")
+            spec = "S" if "bHasCar" in p else "-"
+            parts.append(f"{nm}|T{tn}|{spec}")
+        return ", ".join(parts) if parts else "(empty)"
+
+    def _own_team_players(self, players, team_num):
+        """Players on team_num that expose SPECTATOR fields (local client's team)."""
+        out = []
+        for p in players or []:
+            if p.get("TeamNum") == team_num and "bHasCar" in p:
+                out.append(p)
+        return out
+
+    def _lock_team(self, candidate, players, up=None, reason="SPECTATOR"):
+        self.user_team_num = candidate
+        self._cross_check_fails = 0
+        self._name_miss_streak = 0
+        team_name = "Blue" if candidate == 0 else "Orange"
+        if up is None:
+            own = self._own_team_players(players, candidate)
+            if len(own) == 1:
+                up = own[0]
+            elif self.player_name:
+                up = self._fast_find(own, self.player_name) if own else None
+                if up is None:
+                    up = self._fast_find(players, self.player_name)
+            if up is None and own:
+                # Prefer the car that is actively boosting / has boost meter (local feel)
+                up = max(own, key=lambda p: (
+                    1 if p.get("bBoosting") else 0,
+                    p.get("Boost") or 0,
+                    p.get("Touches") or 0,
+                ))
+        if up is not None:
+            rl_name = up.get("Name") or up.get("name") or ""
+            if rl_name and self._norm_name(rl_name) and (
+                not self.player_name
+                or self._norm_name(rl_name) != self._norm_name(self.player_name)
+            ):
+                # Auto-learn the real RL display name (alt accounts / Settings typo)
+                old = self.player_name
+                self.player_name = rl_name.lower().strip()
+                log(f"Auto-learned RL name: '{old}' → '{self.player_name}'")
+            log(f"Team DETECTED via {reason}: {candidate} ({team_name}) after {self._team_confirm_count} ticks")
+            log(f"FOUND PLAYER: {up.get('Name')} on Team {candidate} ({team_name}) [scores: {self.scores}]")
+            update_status("connected", f"Live - tracking {up.get('Name')}", self.player_name)
+            # Duo detection
+            if self._friend_cache:
+                for fp in players:
+                    if fp.get("TeamNum") == self.user_team_num and fp is not up:
+                        fpname = (fp.get("Name") or "").lower().strip()
+                        if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
+                            self.mode = "duo"
+                            self.friend_name = fp.get("Name")
+                            log(f"Duo detected: {fp.get('Name')}")
+                            break
+        else:
+            log(f"Team DETECTED via {reason}: {candidate} ({team_name}) — name pending (roster: {self._roster_summary(players)})")
+            update_status("connected", f"Live - team {team_name} locked", self.player_name)
 
     def _find_user_player(self, players):
         """Team-locked user lookup for stats capture. Only ever returns a
@@ -323,24 +441,33 @@ class MatchState:
         Used AFTER detection has locked user_team_num. Detection itself
         still uses _fast_find (both teams) because the team is unknown yet.
         Two-pass: exact name first, partial fallback — both filtered to
-        user_team_num.
+        user_team_num. SPECTATOR-only lock: if name missing, fall back to
+        sole own-team SPECTATOR player (1v1 / solo queue).
         """
         if self.user_team_num is None:
             return None
+        own = [p for p in (players or []) if p.get("TeamNum") == self.user_team_num]
         # Pass 1: exact name, team-locked
-        for p in players:
-            pname = p.get("Name", "")
-            if (pname and pname.lower() == self.player_name
-                    and p.get("TeamNum") == self.user_team_num):
-                return p
-        # Pass 2: partial name, team-locked
-        for p in players:
-            pname = p.get("Name", "").lower()
-            if not pname:
-                continue
-            if p.get("TeamNum") == self.user_team_num:
-                if self.player_name in pname or pname in self.player_name:
+        if self.player_name:
+            for p in own:
+                pname = p.get("Name") or p.get("name") or ""
+                if pname and pname.lower() == self.player_name:
                     return p
+            # Pass 2: normalized / partial name, team-locked
+            target_n = self._norm_name(self.player_name)
+            for p in own:
+                pname = p.get("Name") or p.get("name") or ""
+                if not pname:
+                    continue
+                pname_l = pname.lower()
+                pname_n = self._norm_name(pname_l)
+                if (self.player_name in pname_l or pname_l in self.player_name
+                        or (target_n and pname_n and (target_n in pname_n or pname_n in target_n))):
+                    return p
+        # Pass 3: sole SPECTATOR player on own team (works without configured name)
+        spec = self._own_team_players(players, self.user_team_num)
+        if len(spec) == 1:
+            return spec[0]
         return None
 
     def handle_update_state(self, data):
@@ -349,18 +476,17 @@ class MatchState:
         self.tick_count += 1
         self._last_update_time = time.time()
 
-        # Team detection via SPECTATOR fields + name-based cross-check (v2.0.2).
-        # SPECTATOR: bHasCar is a SPECTATOR field — RL docs say "present only if
-        # the client is spectating or on the player's team." We use it as primary.
+        # Team detection (v3.0.4):
+        # SPECTATOR fields (bHasCar) are PRIMARY — present only on local client's team.
+        # Name matching is BEST-EFFORT for picking "you" among teammates and for
+        # Settings / alt-account identity. A missing/wrong Settings name must NOT
+        # block team lock forever (that prevented session auto-create entirely).
         #
-        # CROSS-CHECK: after 3 consistent SPECTATOR ticks, we verify the user's
-        # name is actually on that team via _find_user_player. If the name can't
-        # be found on the SPECTATOR-detected team for 5 consecutive ticks after
-        # lock, the detection was wrong — unlock and retry.
-        #
-        # FALLBACK: if SPECTATOR can't determine team after 10 attempts (all
-        # players have invalid TeamNum or no bHasCar), fall back to name-based
-        # _fast_find on any team.
+        # 1) 3 consistent SPECTATOR ticks → candidate team
+        # 2) If configured name is on THAT team → lock + track that player
+        # 3) If name is on the OTHER team → reject candidate (true mismatch)
+        # 4) If name not in roster → log roster, then SPECTATOR-only lock
+        #    (auto-learn sole own-team name; still lock so W/L + session work)
         if self.user_team_num is None and players:
             for p in players:
                 if "bHasCar" in p:
@@ -369,32 +495,27 @@ class MatchState:
                         if candidate == self._team_confirm_candidate:
                             self._team_confirm_count += 1
                             if self._team_confirm_count >= 3:
-                                # Cross-check: use _fast_find (any team) to find user
-                                # by name, then verify they're on the SPECTATOR team
-                                up = self._fast_find(players, self.player_name)
+                                up = self._fast_find(players, self.player_name) if self.player_name else None
                                 if up and up.get("TeamNum") == candidate:
-                                    self.user_team_num = candidate
-                                    team_name = "Blue" if candidate == 0 else "Orange"
-                                    self._cross_check_fails = 0
-                                    log(f"Team DETECTED via SPECTATOR + name cross-check: {candidate} ({team_name}) after {self._team_confirm_count} ticks")
-                                    log(f"FOUND PLAYER: {up.get('Name')} on Team {candidate} ({team_name}) [scores: {self.scores}]")
-                                    update_status("connected", f"Live - tracking {up.get('Name')}", self.player_name)
-                                    # Duo detection
-                                    if self._friend_cache:
-                                        for fp in players:
-                                            if fp.get("TeamNum") == self.user_team_num and fp is not up:
-                                                fpname = fp.get("Name", "").lower().strip()
-                                                if fpname in self._friend_cache or any(f in fpname or fpname in f for f in self._friend_cache):
-                                                    self.mode = "duo"
-                                                    self.friend_name = fp.get("Name")
-                                                    log(f"Duo detected: {fp.get('Name')}")
-                                                    break
-                                else:
-                                    # SPECTATOR says team X but user's name found on different team (or not found)
-                                    found_team = up.get("TeamNum") if up else "not found"
-                                    log(f"SPECTATOR candidate {candidate} but user '{self.player_name}' on team {found_team} — will retry")
+                                    self._spec_only_lock = False
+                                    self._lock_team(candidate, players, up=up, reason="SPECTATOR + name")
+                                elif up and up.get("TeamNum") in (0, 1) and up.get("TeamNum") != candidate:
+                                    # True conflict: name on other team — do not lock SPECTATOR
+                                    log(f"SPECTATOR candidate {candidate} but user '{self.player_name}' on team {up.get('TeamNum')} — will retry")
                                     self._team_confirm_count = 0
                                     self._team_confirm_candidate = None
+                                    self._name_miss_streak = 0
+                                else:
+                                    # Name missing from roster (alt account / typo / empty Settings)
+                                    self._name_miss_streak += 1
+                                    now = time.time()
+                                    if now - self._last_roster_log > 15:
+                                        self._last_roster_log = now
+                                        log(f"Name '{self.player_name or '(empty)'}' not in roster — {self._roster_summary(players)}")
+                                    # Lock via SPECTATOR so sessions still auto-create.
+                                    # Immediate lock after confirm; name is optional.
+                                    self._spec_only_lock = True
+                                    self._lock_team(candidate, players, up=None, reason="SPECTATOR-only (name missing)")
                         else:
                             # Different team — reset counter
                             team_name_new = "Blue" if candidate == 0 else "Orange"
@@ -405,20 +526,42 @@ class MatchState:
                         break  # Found valid team candidate — stop scanning
                     # else: TeamNum invalid (-1/None) — skip this player, check next one
 
-        # Post-lock cross-check: if user disappears from detected team for 5+
-        # consecutive ticks, the detection was wrong — unlock and retry.
+            # Fallback: no bHasCar at all after many ticks — try pure name lock
+            if self.user_team_num is None and self.player_name and self.tick_count >= 30:
+                up = self._fast_find(players, self.player_name)
+                tnum = up.get("TeamNum", -1) if up else -1
+                if up and tnum in (0, 1):
+                    self._team_confirm_candidate = tnum
+                    self._team_confirm_count = 3
+                    self._spec_only_lock = False
+                    self._lock_team(tnum, players, up=up, reason="name-only fallback")
+
+        # Post-lock: only unlock if SPECTATOR evidence for our team disappears
+        # for several ticks AND name also cannot be found. Do NOT unlock solely
+        # because Settings name differs from RL display name (alt accounts).
         if self.user_team_num is not None and players:
             up = self._find_user_player(players)
-            if up is None:
+            own_spec = self._own_team_players(players, self.user_team_num)
+            if up is None and not own_spec:
                 self._cross_check_fails += 1
-                if self._cross_check_fails >= 5:
-                    log(f"User '{self.player_name}' not found on team {self.user_team_num} for {self._cross_check_fails} ticks — unlocking team!")
+                if self._cross_check_fails >= 15:
+                    log(f"Team {self.user_team_num} lost SPECTATOR evidence for {self._cross_check_fails} ticks — unlocking")
                     self.user_team_num = None
                     self._team_confirm_count = 0
                     self._team_confirm_candidate = None
                     self._cross_check_fails = 0
+                    self._spec_only_lock = False
             else:
                 self._cross_check_fails = 0
+                # If we locked SPECTATOR-only and later learn the real name, upgrade status
+                if up is not None and self._spec_only_lock:
+                    rl_name = (up.get("Name") or up.get("name") or "").lower().strip()
+                    if rl_name and rl_name != self.player_name:
+                        old = self.player_name
+                        self.player_name = rl_name
+                        log(f"Auto-learned RL name (post-lock): '{old}' → '{self.player_name}'")
+                    self._spec_only_lock = False
+                    update_status("connected", f"Live - tracking {up.get('Name')}", self.player_name)
 
         # v2.0.15: DO NOT use game.Teams[].Score — it reports CUMULATIVE
         # session scores (carries over between matches) and OT-period-only
@@ -717,6 +860,7 @@ def run_listener(player: str, friends: list, stop_event):
             pos = 0
             last_heartbeat = time.time()
             last_flush = time.time()
+            last_config_check = 0.0
             event_count = 0
             stall_count = 0
             first_data = True
@@ -920,6 +1064,26 @@ def run_listener(player: str, friends: list, stop_event):
                     log(f"Heartbeat: {event_count} events, tick={state.tick_count}, team={state.user_team_num}, buf={len(buffer)}B, stall={stall_count}")
                     last_heartbeat = now
 
+                # Hot-reload Settings name/friends (alt account switch without restart)
+                if now - last_config_check > 2:
+                    last_config_check = now
+                    try:
+                        cfg = load_config() or {}
+                        pcfg = cfg.get("player") or {}
+                        new_name = pcfg.get("name") or ""
+                        new_friends = pcfg.get("friends") or []
+                        if state.set_player_identity(new_name, new_friends):
+                            player = new_name
+                            friends = new_friends
+                            update_status(
+                                "connected" if state._connected else "connecting",
+                                f"Identity → {new_name or '(empty)'}",
+                                player,
+                                friends,
+                            )
+                    except Exception as e:
+                        log(f"Config reload warn: {e}")
+
                 # Flush log to disk every 5s (not on every event!)
                 if now - last_flush > 5:
                     flush_log()
@@ -947,6 +1111,17 @@ def run_listener(player: str, friends: list, stop_event):
 
         # Elpojošs polling — adaptīvs intervāls atkarībā no datu plūsmas
         now = time.time()
+        # Also pick up Settings changes while waiting for RL / reconnecting
+        try:
+            cfg = load_config() or {}
+            pcfg = cfg.get("player") or {}
+            new_name = pcfg.get("name") or ""
+            new_friends = pcfg.get("friends") or []
+            if state.set_player_identity(new_name, new_friends):
+                player = new_name
+                friends = new_friends
+        except Exception:
+            pass
         if state._connected and state._last_update_time > 0:
             gap = now - state._last_update_time
             state._poll_interval = 2 if gap < 5 else 15 if gap < 30 else 60
