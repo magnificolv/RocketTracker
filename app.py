@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 from flask import Flask, jsonify, request, send_from_directory, Response
 from coach import CoachEngine
+from result_logic import ensure_schema, repair_inverted_results
 
 # DB persistence: store next to exe
 if getattr(sys, 'frozen', False):
@@ -17,7 +18,7 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 DB_PATH = BASE_DIR / "data-v2.db"
 
 # v1.1: Auto-update check against GitHub releases.
-APP_VERSION = "3.0.4"
+APP_VERSION = "3.1.0"
 GITHUB_REPO = "magnificolv/RocketTracker"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -93,6 +94,8 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_summary_played ON matches_summary(played_at DESC);
     """)
     _migrate_columns(conn)
+    ensure_schema(conn)
+    fixed = repair_inverted_results(conn)
     try:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_playlist ON matches(playlist)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_mode ON matches(mode)")
@@ -166,7 +169,11 @@ def session_deep_stats(sid):
             ROUND(AVG(ground_time_pct), 1) as avg_ground_time,
             ROUND(AVG(wall_time_pct), 1) as avg_wall_time,
             MAX(fastest_goal_kph) as all_time_fastest_goal,
-            ROUND(AVG(avg_shot_power), 1) as overall_avg_shot_power
+            ROUND(AVG(avg_shot_power), 1) as overall_avg_shot_power,
+            SUM(crossbar_hits) as total_crossbars,
+            SUM(boost_pads) as total_boost_pads,
+            SUM(boost_pills) as total_boost_pills,
+            SUM(forfeit) as total_forfeits
         FROM match_details WHERE match_id IN (SELECT id FROM matches WHERE session_id=?)
         """,
         (sid,),
@@ -535,7 +542,11 @@ def deep_stats():
             ROUND(AVG(md.ground_time_pct), 1) as avg_ground_time,
             ROUND(AVG(md.wall_time_pct), 1) as avg_wall_time,
             ROUND(MAX(md.fastest_goal_kph), 1) as all_time_fastest_goal,
-            ROUND(AVG(md.avg_shot_power), 1) as overall_avg_shot_power
+            ROUND(AVG(md.avg_shot_power), 1) as overall_avg_shot_power,
+            SUM(md.crossbar_hits) as total_crossbars,
+            SUM(md.boost_pads) as total_boost_pads,
+            SUM(md.boost_pills) as total_boost_pills,
+            SUM(md.forfeit) as total_forfeits
         {joins}{wh}
     """, params).fetchone()
     # user goals from matches under same filter

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RL Tracker 3.0.4 · Starlight</title>
+<title>RL Tracker 3.1.0 · Starlight</title>
 <style>
 
 :root{
@@ -167,6 +167,7 @@ body{
 .match-row .score{font-size:1.2rem;font-weight:800;letter-spacing:-.02em}
 .match-row .result-win{color:var(--green);font-weight:800;letter-spacing:.04em}
 .match-row .result-loss{color:var(--red);font-weight:800;letter-spacing:.04em}
+.match-row .result-draw{color:var(--muted);font-weight:800;letter-spacing:.04em}
 .match-row .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .match-detail-popup{display:none;grid-column:1/-1;background:rgba(8,8,18,.92);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-top:4px}
 .match-detail-popup.show{display:block;animation:in .2s ease}
@@ -231,7 +232,7 @@ body{
   <img src="logo.png" class="header-logo" alt="RL Tracker">
   <h1>Rocket League <span class="accent">Tracker</span></h1>
   <p class="subtitle">Starlight edition · track the grind, share the session</p>
-  <p class="version">RL Tracker 3.0.4 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
+  <p class="version">RL Tracker 3.1.0 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
 </div>
 <nav class="nav">
   <button class="nav-btn active" data-tab="active-session"><span class="ni"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M14 10h4M14 14h4"/></svg></span>Session</button>
@@ -317,6 +318,12 @@ function showToast(m){const e=document.createElement('div');e.className='toast';
 function formatDate(iso){try{return new Date(iso).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return iso}}
 function relativeTime(iso){const d=new Date(iso),n=new Date(),diff=Math.floor((n-d)/1000);if(diff<60)return'just now';if(diff<3600)return Math.floor(diff/60)+'m ago';if(diff<86400)return Math.floor(diff/3600)+'h ago';return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
 function gradeColor(g){g=(g||'').toUpperCase();if(g.startsWith('A'))return'var(--green)';if(g.startsWith('B'))return'var(--cyan)';if(g.startsWith('C'))return'var(--orange)';return'var(--red)'}
+function resultClass(r){return r==='win'?'result-win':r==='draw'?'result-draw':'result-loss'}
+function tagPills(m){
+  const t=m.tags||'';
+  if(!t) return '';
+  return String(t).split(',').filter(Boolean).map(x=>`<span class="tag">${x.trim()}</span>`).join('');
+}
 function trendIcon(t){return t==='up'?'↑':t==='down'?'↓':'→'}
 function trendClass(t){return t==='up'?'trend-up':t==='down'?'trend-down':'trend-flat'}
 
@@ -364,6 +371,8 @@ function renderDeepBlocks(a){
     ${mv('loss', a.total_demos_taken||a.demos_taken||0,'Demos Taken','red')}
     ${mv('save', a.total_saves||a.saves||0,'Saves','')}
     ${mv('clock', a.total_overtime||a.overtime||0,'Overtimes','')}
+    ${mv('shot', a.total_crossbars||a.crossbar_hits||0,'Crossbars','')}
+    ${mv('boost', a.total_boost_pills||a.boost_pills||0,'Big Boosts','')}
     ${mv('touch', a.total_touches||a.touches||0,'Touches','')}
     ${mv('touch', a.total_car_touches||a.car_touches||0,'Car Touches','')}
     ${mv('users', a.total_assists||a.assists||0,'Assists','')}
@@ -420,8 +429,9 @@ function matchRowHtml(m,i){
       <div><div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Match ${i+1}</div>
         <div class="score">${m.user_score} – ${m.opponent_score}</div></div>
       <div class="meta">
-        <span class="${m.result==='win'?'result-win':'result-loss'}">${(m.result||'').toUpperCase()}</span>
+        <span class="${resultClass(m.result)}">${(m.result||'').toUpperCase()}</span>
         <span class="tag">${ic('playlist')} ${m.playlist||'Unknown'}</span>
+        ${tagPills(m)}
         ${matchBadges(m)}
       </div>
       <div style="color:var(--muted);font-size:.75rem">details</div>
@@ -491,11 +501,11 @@ async function loadOlderMatches(){
     const r=await api('/api/matches/summaries?offset='+olderMatchesOffset+'&limit=50');const sums=r.summaries||[];
     if(!sums.length){c.insertAdjacentHTML('beforeend','<p style="color:var(--muted);text-align:center;padding:12px">No more matches</p>');return}
     c.insertAdjacentHTML('beforeend',sums.map(s=>{
-      const accent=s.result==='win'?'var(--green)':'var(--red)';
+      const accent=s.result==='win'?'var(--green)':s.result==='draw'?'var(--muted)':'var(--red)';
       return`<div class="card" style="border-left:4px solid ${accent}">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
           <div><span class="score" style="font-size:1.1rem">${s.user_score} – ${s.opponent_score}</span>
-            <span class="${s.result==='win'?'result-win':'result-loss'}" style="margin-left:10px">${(s.result||'').toUpperCase()}</span></div>
+            <span class="${resultClass(s.result)}" style="margin-left:10px">${(s.result||'').toUpperCase()}</span></div>
           <span style="color:var(--muted);font-size:.75rem">${relativeTime(s.played_at)}</span>
         </div>
         <div class="hi-line">

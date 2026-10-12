@@ -19,6 +19,13 @@ from pathlib import Path
 from coach import CoachEngine
 
 from field_resolver import FieldResolver
+from result_logic import (
+    accolade_label,
+    decide_result,
+    ensure_schema,
+    playlist_label,
+    repair_inverted_results,
+)
 
 if sys.platform == "win32":
     try:
@@ -158,8 +165,12 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_summary_played ON matches_summary(played_at DESC);
     """)
+    ensure_schema(conn)
+    fixed = repair_inverted_results(conn)
     conn.commit()
     conn.close()
+    if fixed:
+        log(f"Repaired inverted W/L on match ids: {fixed}")
     log("DB initialized: matches_summary table ready")
 
 
@@ -244,7 +255,9 @@ class MatchState:
                  '_last_update_time', '_poll_interval', '_connected',
                  '_team_confirm_count', '_team_confirm_candidate',
                  '_cross_check_fails', '_last_roster_log', '_name_miss_streak',
-                 '_spec_only_lock')
+                 '_spec_only_lock', 'team_names', 'playlist_id', 'in_replay',
+                 'crossbar_hits', 'boost_pads', 'boost_pills', 'accolades',
+                 'forfeit', '_demos_baselined')
 
     def __init__(self, player_name, friend_names):
         self.player_name = (player_name or "").lower().strip()
@@ -286,9 +299,18 @@ class MatchState:
         self.boost_sum = 0; self.boost_count = 0
         self.boosting_ticks = 0; self.supersonic_ticks = 0
         self.on_ground_ticks = 0; self.in_air_ticks = 0; self.on_wall_ticks = 0
+        self.team_names = {}
+        self.playlist_id = None
+        self.in_replay = False
+        self.crossbar_hits = 0
+        self.boost_pads = 0
+        self.boost_pills = 0
+        self.accolades = []
+        self.forfeit = False
         # NOTE: _match_recorded is NOT reset here — it lives until MatchCreated
         self._player_cache.clear()
         self._prev_demos = 0
+        self._demos_baselined = False
         self._was_demolished = False
         self._team_confirm_count = 0
         self._team_confirm_candidate = None
@@ -563,34 +585,45 @@ class MatchState:
                     self._spec_only_lock = False
                     update_status("connected", f"Live - tracking {up.get('Name')}", self.player_name)
 
-        # v2.0.15: DO NOT use game.Teams[].Score — it reports CUMULATIVE
-        # session scores (carries over between matches) and OT-period-only
-        # scores during overtime. GoalScored events are the authoritative
-        # score source and reset correctly per-match via reset().
+        # v2.0.15: DO NOT use game.Teams[].Score — cumulative / OT-only.
+        # v3.1: keep team NAMES so Winner can be matched when colors aren't Blue/Orange.
+        for t in (game.get("Teams") or []):
+            tn = t.get("TeamNum")
+            nm = t.get("Name")
+            if tn in (0, 1) and nm:
+                self.team_names[int(tn)] = nm
+        if "bReplay" in game:
+            self.in_replay = bool(game.get("bReplay"))
 
         # Simple fields
         arena = game.get("Arena", "")
         if arena and not self.arena:
             self.arena = arena
-        # Playlist: prefer RL fields, else player-count fallback
-        pl_found = False
-        for key in ("Playlist", "PlaylistName", "MatchType", "GameMode", "Mode"):
-            val = game.get(key)
-            if val not in (None, "", 0):
-                self.playlist = str(val)
-                pl_found = True
-                break
-        if not pl_found:
-            npl = len(players) if players else 0
-            if npl:
-                if npl <= 2:
-                    self.playlist = "1v1"
-                elif npl <= 4:
-                    self.playlist = "2v2"
-                elif npl <= 6:
-                    self.playlist = "3v3"
-                else:
-                    self.playlist = f"{npl}p"
+        # PlaylistId is the real mode (ranked vs casual vs extra). Name fields are fallback.
+        pid = game.get("PlaylistId")
+        if pid not in (None, "", 0) or (pid == 0 and not self.playlist_id):
+            if pid not in (None, ""):
+                self.playlist_id = pid
+                self.playlist = playlist_label(pid, len(players) if players else 0, self.playlist)
+        if not self.playlist or self.playlist == "Unknown":
+            pl_found = False
+            for key in ("Playlist", "PlaylistName", "MatchType", "GameMode", "Mode"):
+                val = game.get(key)
+                if val not in (None, "", 0):
+                    self.playlist = str(val)
+                    pl_found = True
+                    break
+            if not pl_found:
+                npl = len(players) if players else 0
+                if npl:
+                    if npl <= 2:
+                        self.playlist = "1v1"
+                    elif npl <= 4:
+                        self.playlist = "2v2"
+                    elif npl <= 6:
+                        self.playlist = "3v3"
+                    else:
+                        self.playlist = f"{npl}p"
         if game.get("bOvertime"):
             self.is_overtime = True
         if "TimeSeconds" in game:
@@ -624,9 +657,13 @@ class MatchState:
                 else:
                     self.in_air_ticks += 1
 
-                # Demolish tracking — diff-based from UpdateState (RL doesn't send Demolish events!)
+                # Demolish tracking — baseline the first tick so a session-cumulative
+                # Demos counter is not dumped into this match as 20+ fake demos.
                 demos_now = p.get("Demos", 0) or 0
-                if demos_now > self._prev_demos:
+                if not self._demos_baselined:
+                    self._prev_demos = demos_now
+                    self._demos_baselined = True
+                elif demos_now > self._prev_demos:
                     self.demos_given += demos_now - self._prev_demos
                 self._prev_demos = demos_now
 
@@ -678,31 +715,32 @@ class MatchState:
                         if self.mode == "duo" and not self.friend_name:
                             self.friend_name = self.teammate_name
 
-        # Match end detection (only check if player found)
+        # Match end. Score is authority at full time; WinnerTeamNum only overrides
+        # an early end (forfeit). Never map an unknown Winner string to Orange.
         if self.user_team_num is not None and game.get("bHasWinner") and not self._match_recorded:
             self._match_recorded = True
             winner = game.get("Winner")
-            result = "loss"  # default
-            if winner is not None:
-                if isinstance(winner, str):
-                    winner_num = 0 if winner.lower() == "blue" else 1
-                else:
-                    try:
-                        winner_num = int(winner)
-                    except (ValueError, TypeError):
-                        winner_num = -1
-                if winner_num in (0, 1):
-                    result = "win" if winner_num == self.user_team_num else "loss"
-                else:
-                    result = "win" if self.user_score > self.opponent_score else "loss"
-            else:
-                result = "win" if self.user_score > self.opponent_score else "loss"
-            # FIXED: record_match and reset moved OUTSIDE the else block
-            log(f"Match ended (bHasWinner): {result.upper()}! {self.scores[0]}-{self.scores[1]}")
-            self.record_match(result)
-            self.reset()
+            result = decide_result(
+                self.user_team_num, winner, self.scores,
+                self.team_names, self.time_remaining,
+            )
+            self._finish_end(result, winner, "bHasWinner")
             return True
         return False
+
+    def _finish_end(self, result, winner, source):
+        remaining = self.time_remaining if self.time_remaining is not None else 0
+        if remaining > 20 and result in ("win", "loss"):
+            self.forfeit = True
+            if "Forfeit" not in self.accolades:
+                self.accolades.append("Forfeit")
+        log(
+            f"Match ended ({source}): {result.upper()}! "
+            f"user {self.user_score}-{self.opponent_score} raw {self.scores} "
+            f"winner={winner!r} team={self.user_team_num} clock={remaining}"
+        )
+        self.record_match(result)
+        self.reset()
 
     def record_match(self, result):
         if self.user_team_num is None:
@@ -736,9 +774,11 @@ class MatchState:
                 )
             except Exception:
                 pass
+        ensure_schema(db)
+        tags = ", ".join(self.accolades) if self.accolades else None
         cur = db.execute(
-            "INSERT INTO matches (session_id, played_at, user_score, opponent_score, result, mode, playlist, friend_name) VALUES (?,?,?,?,?,?,?,?)",
-            (session_id, now, self.user_score, self.opponent_score, result, self.mode, self.playlist or "Unknown", self.friend_name))
+            "INSERT INTO matches (session_id, played_at, user_score, opponent_score, result, mode, playlist, friend_name, tags) VALUES (?,?,?,?,?,?,?,?,?)",
+            (session_id, now, self.user_score, self.opponent_score, result, self.mode, self.playlist or "Unknown", self.friend_name, tags))
         match_id = cur.lastrowid
         if not match_id:
             db.close()
@@ -756,8 +796,9 @@ class MatchState:
                (match_id, arena, overtime, touches, car_touches, shots, saves, assists,
                 demos_given, demos_taken, boost_avg, boost_time_pct, supersonic_time_pct,
                 ground_time_pct, air_time_pct, wall_time_pct, fastest_goal_kph, avg_shot_power, time_remaining_sec,
-                playlist, teammate_name, teammate_shots, teammate_saves, teammate_assists, teammate_touches, teammate_demos)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                playlist, teammate_name, teammate_shots, teammate_saves, teammate_assists, teammate_touches, teammate_demos,
+                crossbar_hits, boost_pads, boost_pills, forfeit, accolades)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (match_id, self.arena, int(self.is_overtime), self.touches, self.car_touches,
              self.shots, self.saves, self.assists, self.demos_given, self.demos_taken,
              round(self.boost_sum / max(self.boost_count, 1), 1),
@@ -769,7 +810,8 @@ class MatchState:
              fastest_goal, avg_power, self.time_remaining,
              self.playlist or "Unknown", self.teammate_name,
              self.teammate_shots, self.teammate_saves, self.teammate_assists,
-             self.teammate_touches, self.teammate_demos))
+             self.teammate_touches, self.teammate_demos,
+             self.crossbar_hits, self.boost_pads, self.boost_pills, int(self.forfeit), tags))
 
         for g in self.goals:
             db.execute("INSERT INTO goals (match_id, scored_at, scorer, assister, team_num, speed_kph, time_remaining_sec) VALUES (?,?,?,?,?,?,?)",
@@ -783,7 +825,8 @@ class MatchState:
         db.close()
         _write_summary(match_id)
         flush_log()
-        log(f"RECORDED: {'WIN' if result == 'win' else 'LOSS'}! {self.user_score}-{self.opponent_score} [{self.mode}/{self.playlist}]")
+        label = "WIN" if result == "win" else ("DRAW" if result == "draw" else "LOSS")
+        log(f"RECORDED: {label}! {self.user_score}-{self.opponent_score} [{self.mode}/{self.playlist}]")
         # Active Coach (TRIZ #25): self-analyse immediately after recording.
         # Runs after DB close so a coach error can never corrupt the match row.
         # Insights are informational only - failures are logged and swallowed.
@@ -917,11 +960,15 @@ def run_listener(player: str, friends: list, stop_event):
 
                         elif event == "MatchCreated":
                             if state.user_team_num is not None and not state._match_recorded:
-                                state._match_recorded = True
-                                res = "win" if state.user_score > state.opponent_score else "loss"
-                                log(f"MatchCreated -> auto-recording previous ({res})")
-                                state.record_match(res)
-                                state.reset()
+                                if state.user_score == 0 and state.opponent_score == 0 and not state.goals:
+                                    log("MatchCreated: skip empty previous match")
+                                    state.reset()
+                                else:
+                                    state._match_recorded = True
+                                    res = decide_result(state.user_team_num, None, state.scores, state.team_names, state.time_remaining)
+                                    log(f"MatchCreated -> auto-recording previous ({res})")
+                                    state.record_match(res)
+                                    state.reset()
                             state.match_guid = (raw_data or {}).get("MatchGuid", "") if isinstance(raw_data, dict) else ""
                             state._match_recorded = False  # Allow new match to be recorded
 
@@ -929,26 +976,19 @@ def run_listener(player: str, friends: list, stop_event):
                             if state.user_team_num is not None and not state._match_recorded:
                                 state._match_recorded = True
                                 d = raw_data if isinstance(raw_data, dict) else (json.loads(raw_data) if isinstance(raw_data, str) else {})
-                                winner = FieldResolver.resolve(d, "winner")
-                                if winner is not None:
-                                    if isinstance(winner, str):
-                                        wn = 0 if winner.lower() == "blue" else 1
-                                    else:
-                                        try:
-                                            wn = int(winner)
-                                        except (ValueError, TypeError):
-                                            wn = -1
-                                    if wn in (0, 1):
-                                        result = "win" if wn == state.user_team_num else "loss"
-                                    else:
-                                        result = "win" if state.user_score > state.opponent_score else "loss"
-                                else:
-                                    result = "win" if state.user_score > state.opponent_score else "loss"
-                                log(f"{event}: {result.upper()}! {state.scores[0]}-{state.scores[1]}")
-                                state.record_match(result)
-                                state.reset()
+                                winner = d.get("WinnerTeamNum")
+                                if winner is None:
+                                    winner = d.get("Winner")
+                                result = decide_result(
+                                    state.user_team_num, winner, state.scores,
+                                    state.team_names, state.time_remaining,
+                                )
+                                state._finish_end(result, winner, event)
 
                         elif event == "GoalScored":
+                            if state.in_replay:
+                                pos += end
+                                continue
                             d = raw_data if isinstance(raw_data, dict) else (json.loads(raw_data) if isinstance(raw_data, str) else {})
                             scorer = FieldResolver.resolve_raw(d, "scorer") or {}
                             # Scorer var būt dict (ar Name/TeamNum) vai vienkārši string
@@ -1035,6 +1075,38 @@ def run_listener(player: str, friends: list, stop_event):
                         elif event == "ClockUpdatedSeconds":
                             if isinstance(raw_data, dict):
                                 state.time_remaining = raw_data.get("TimeSeconds", state.time_remaining)
+                                if raw_data.get("bOvertime"):
+                                    state.is_overtime = True
+
+                        elif event in ("GoalReplayStart",):
+                            state.in_replay = True
+                        elif event in ("GoalReplayEnd", "RoundStarted"):
+                            state.in_replay = False
+
+                        elif event == "StatfeedEvent":
+                            d = raw_data if isinstance(raw_data, dict) else {}
+                            label = accolade_label(d.get("EventName"))
+                            target = d.get("MainTarget") or {}
+                            if label and state.user_team_num is not None and target.get("TeamNum") == state.user_team_num:
+                                if label not in state.accolades:
+                                    state.accolades.append(label)
+                                    log(f"ACCOLADE: {label} ({target.get('Name')})")
+
+                        elif event == "CrossbarHit":
+                            d = raw_data if isinstance(raw_data, dict) else {}
+                            touch = (d.get("BallLastTouch") or {}).get("Player") or {}
+                            if state.user_team_num is None or touch.get("TeamNum") == state.user_team_num:
+                                state.crossbar_hits += 1
+
+                        elif event == "BoostPickup":
+                            d = raw_data if isinstance(raw_data, dict) else {}
+                            who = d.get("Player") or {}
+                            if state.user_team_num is not None and who.get("TeamNum") == state.user_team_num and not d.get("bReplay"):
+                                kind = str(d.get("BoostType") or "")
+                                if "Pill" in kind:
+                                    state.boost_pills += 1
+                                else:
+                                    state.boost_pads += 1
 
                         pos += end
 
@@ -1093,8 +1165,8 @@ def run_listener(player: str, friends: list, stop_event):
             state._connected = False
             state._poll_interval = 60
             sock.close()
-            if state.user_team_num is not None and state.tick_count > 0:
-                res = "win" if state.user_score > state.opponent_score else "loss"
+            if state.user_team_num is not None and state.tick_count > 0 and (state.user_score or state.opponent_score or state.goals):
+                res = decide_result(state.user_team_num, None, state.scores, state.team_names, state.time_remaining)
                 log(f"Saving in-progress match: {res}")
                 state.record_match(res)
                 state.reset()
