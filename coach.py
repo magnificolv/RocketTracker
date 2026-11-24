@@ -1,12 +1,15 @@
 """
-RL Tracker 3.0 — Active Coach Engine + Coach 2.0 session reports
-================================================================
-After each match: anomaly insights vs last 20.
-Session report: grades, category scores, tips for you (+ teammate if duo).
+RL Tracker 4.0 Overdrive — Active Coach Engine
+===============================================
+- Personal-stat match anomaly insights vs last 20 matches
+- Coach 4.0 session reports with 5-axis Radar vs baseline & full Duo teammate
+- Win vs Loss telemetry diff diagnostics
+- Career Trophy Cabinet records with match_id, date, playlist & longest streak
 """
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 WINDOW = 20
@@ -16,14 +19,17 @@ TYPE_DEMOS = "demos"
 TYPE_SPEED = "speed_record"
 TYPE_BOOST = "boost_warning"
 TYPE_SAVES = "saves"
+TYPE_MVP = "mvp"
 
 
-def _clamp(n, lo=0, hi=100):
+def _clamp(n: float, lo: float = 0, hi: float = 100) -> float:
     return max(lo, min(hi, n))
 
 
 def _grade(score: float) -> str:
     s = float(score)
+    if s >= 95:
+        return "S"
     if s >= 93:
         return "A+"
     if s >= 90:
@@ -60,20 +66,34 @@ def _trend(cur: float, base: float) -> str:
     return "flat"
 
 
+def _effective_goals(row: Dict[str, Any]) -> float:
+    pg = row.get("player_goals")
+    if pg is not None:
+        try:
+            return float(pg)
+        except (TypeError, ValueError):
+            pass
+    try:
+        return float(row.get("user_score") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 class CoachEngine:
-    """Analyse matches and build Coach 2.0 session reports."""
+    """Analyse matches, Win-vs-Loss deltas, records, and Coach 4.0 session reports."""
 
     def __init__(self, db_path: str):
         self.db_path = db_path
 
-    def _conn(self):
+    def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
-    def _get_match(self, conn, match_id):
+    def _get_match(self, conn: sqlite3.Connection, match_id: int):
         return conn.execute(
             "SELECT m.*, md.*, "
+            "COALESCE(md.player_goals, m.user_score) as effective_goals, "
             "(SELECT COUNT(*) FROM goals g WHERE g.match_id=m.id) as goals_in_match "
             "FROM matches m "
             "LEFT JOIN match_details md ON md.match_id = m.id "
@@ -81,31 +101,32 @@ class CoachEngine:
             (match_id,),
         ).fetchone()
 
-    def _recent_matches(self, conn, before_match_id, limit=WINDOW):
+    def _recent_matches(self, conn: sqlite3.Connection, before_match_id: int, limit: int = WINDOW):
         cur = conn.execute("SELECT played_at FROM matches WHERE id=?", (before_match_id,)).fetchone()
         if not cur:
             return []
         played_at = cur["played_at"]
         return conn.execute(
-            "SELECT m.*, md.* FROM matches m "
+            "SELECT m.*, md.*, COALESCE(md.player_goals, m.user_score) as effective_goals "
+            "FROM matches m "
             "LEFT JOIN match_details md ON md.match_id = m.id "
             "WHERE m.played_at < ? ORDER BY m.played_at DESC LIMIT ?",
             (played_at, limit),
         ).fetchall()
 
-    def analyze_match(self, match_id):
+    def analyze_match(self, match_id: int) -> Dict[str, Any]:
         conn = self._conn()
         try:
             match = self._get_match(conn, match_id)
             if not match:
                 return {"error": "Match not found", "insights": []}
             recent = self._recent_matches(conn, match_id, WINDOW)
-            insights, baseline = self._analyse(match, recent)
+            insights, baseline = self._analyse(dict(match), [dict(r) for r in recent])
             return {"match_id": match_id, "insights": insights, "baseline": baseline}
         finally:
             conn.close()
 
-    def get_session_anomalies(self, session_id):
+    def get_session_anomalies(self, session_id: int) -> Dict[str, Any]:
         conn = self._conn()
         try:
             sess = conn.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
@@ -129,103 +150,250 @@ class CoachEngine:
         finally:
             conn.close()
 
-    def get_all_records(self):
+    def get_all_records(self) -> Dict[str, Any]:
         conn = self._conn()
         try:
-            md = conn.execute(
-                """
-                SELECT
-                    MAX(demos_given) as most_demos,
-                    MAX(saves) as most_saves,
-                    MAX(shots) as most_shots,
-                    MAX(touches) as most_touches,
-                    MAX(assists) as most_assists,
-                    MAX(boost_avg) as highest_boost_avg,
-                    MAX(boost_time_pct) as highest_boost_time,
-                    MAX(supersonic_time_pct) as highest_supersonic_time,
-                    MAX(fastest_goal_kph) as fastest_goal_kph,
-                    MAX(avg_shot_power) as highest_avg_shot_power
-                FROM match_details
-                """
-            ).fetchone()
-            goals_row = conn.execute(
-                "SELECT MAX(user_score) as most_goals, "
-                "COUNT(*) as total_matches, "
+            totals = conn.execute(
+                "SELECT COUNT(*) as total_matches, "
                 "SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) as wins, "
                 "SUM(CASE WHEN result='loss' THEN 1 ELSE 0 END) as losses "
                 "FROM matches"
             ).fetchone()
 
-            def _find_match(sql, params=()):
-                r = conn.execute(sql, params).fetchone()
-                return r["match_id"] if r else None
+            def _top_record(expr: str, where: str = "1=1", round_dp: Optional[int] = None) -> Dict[str, Any]:
+                try:
+                    r = conn.execute(
+                        f"""SELECT ({expr}) as val, m.id as match_id, m.played_at, m.playlist
+                            FROM matches m
+                            LEFT JOIN match_details md ON md.match_id = m.id
+                            WHERE {where} AND ({expr}) IS NOT NULL
+                            ORDER BY val DESC, m.played_at DESC
+                            LIMIT 1"""
+                    ).fetchone()
+                    if not r or r["val"] is None:
+                        return {"value": 0, "match_id": None, "played_at": None, "playlist": None}
+                    val = round(float(r["val"]), round_dp) if round_dp is not None else int(round(float(r["val"])))
+                    return {
+                        "value": val,
+                        "match_id": r["match_id"],
+                        "played_at": r["played_at"],
+                        "playlist": r["playlist"] or "Unknown",
+                    }
+                except Exception:
+                    return {"value": 0, "match_id": None, "played_at": None, "playlist": None}
 
-            most_goals_id = (
-                _find_match(
-                    "SELECT id as match_id FROM matches "
-                    "WHERE user_score = (SELECT MAX(user_score) FROM matches) "
-                    "ORDER BY played_at DESC LIMIT 1"
-                )
-                if goals_row["most_goals"]
-                else None
-            )
-            most_demos_id = _find_match(
-                "SELECT match_id FROM match_details "
-                "WHERE demos_given = (SELECT MAX(demos_given) FROM match_details) "
-                "ORDER BY match_id DESC LIMIT 1"
-            )
-            most_saves_id = _find_match(
-                "SELECT match_id FROM match_details "
-                "WHERE saves = (SELECT MAX(saves) FROM match_details) "
-                "ORDER BY match_id DESC LIMIT 1"
-            )
-            fastest_goal_id = _find_match(
-                "SELECT match_id FROM match_details "
-                "WHERE fastest_goal_kph = (SELECT MAX(fastest_goal_kph) FROM match_details) "
-                "ORDER BY match_id DESC LIMIT 1"
-            )
+            # Longest win streak across chronological matches
+            streak_rows = conn.execute(
+                "SELECT id, result, played_at, playlist FROM matches ORDER BY played_at ASC, id ASC"
+            ).fetchall()
+            best_streak = 0
+            cur_streak = 0
+            best_streak_row = None
+            for sr in streak_rows:
+                if sr["result"] == "win":
+                    cur_streak += 1
+                    if cur_streak >= best_streak:
+                        best_streak = cur_streak
+                        best_streak_row = sr
+                else:
+                    cur_streak = 0
 
             return {
                 "records": {
-                    "most_goals": {"value": goals_row["most_goals"] or 0, "match_id": most_goals_id},
-                    "most_demos": {"value": md["most_demos"] or 0, "match_id": most_demos_id},
-                    "most_saves": {"value": md["most_saves"] or 0, "match_id": most_saves_id},
-                    "most_shots": {"value": md["most_shots"] or 0, "match_id": None},
-                    "most_touches": {"value": md["most_touches"] or 0, "match_id": None},
-                    "most_assists": {"value": md["most_assists"] or 0, "match_id": None},
-                    "fastest_goal_kph": {
-                        "value": round(md["fastest_goal_kph"] or 0, 1),
-                        "match_id": fastest_goal_id,
+                    "most_goals": _top_record("COALESCE(md.player_goals, m.user_score)"),
+                    "highest_score": _top_record("COALESCE(md.player_score, 0)", "COALESCE(md.player_score, 0) > 0"),
+                    "most_demos": _top_record("md.demos_given"),
+                    "most_saves": _top_record("md.saves"),
+                    "most_shots": _top_record("md.shots"),
+                    "most_touches": _top_record("md.touches"),
+                    "most_assists": _top_record("md.assists"),
+                    "fastest_goal_kph": _top_record("md.fastest_goal_kph", "md.fastest_goal_kph > 0", round_dp=1),
+                    "highest_boost_avg": _top_record("md.boost_avg", "md.boost_avg > 0", round_dp=1),
+                    "highest_boost_time_pct": _top_record("md.boost_time_pct", "md.boost_time_pct > 0", round_dp=1),
+                    "highest_supersonic_time_pct": _top_record("md.supersonic_time_pct", "md.supersonic_time_pct > 0", round_dp=1),
+                    "highest_avg_shot_power": _top_record("md.avg_shot_power", "md.avg_shot_power > 0", round_dp=1),
+                    "longest_win_streak": {
+                        "value": best_streak,
+                        "match_id": best_streak_row["id"] if best_streak_row else None,
+                        "played_at": best_streak_row["played_at"] if best_streak_row else None,
+                        "playlist": best_streak_row["playlist"] if best_streak_row else None,
                     },
-                    "highest_boost_avg": {
-                        "value": round(md["highest_boost_avg"] or 0, 1),
-                        "match_id": None,
-                    },
-                    "highest_boost_time_pct": {
-                        "value": round(md["highest_boost_time"] or 0, 1),
-                        "match_id": None,
-                    },
-                    "highest_supersonic_time_pct": {
-                        "value": round(md["highest_supersonic_time"] or 0, 1),
-                        "match_id": None,
-                    },
-                    "highest_avg_shot_power": {
-                        "value": round(md["highest_avg_shot_power"] or 0, 1),
-                        "match_id": None,
-                    },
-                    "total_matches": goals_row["total_matches"] or 0,
-                    "total_wins": goals_row["wins"] or 0,
-                    "total_losses": goals_row["losses"] or 0,
+                    "total_matches": totals["total_matches"] or 0,
+                    "total_wins": totals["wins"] or 0,
+                    "total_losses": totals["losses"] or 0,
                 }
             }
         finally:
             conn.close()
 
+    def win_vs_loss_diff(
+        self,
+        mode: str = "",
+        playlist: str = "",
+        days: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Compare average telemetry between Wins and Losses and emit concrete insights."""
+        where = ["m.result IN ('win', 'loss')"]
+        params: List[Any] = []
+        mode_l = (mode or "").strip().lower()
+        if mode_l in ("solo", "duo"):
+            where.append("m.mode=?")
+            params.append(mode_l)
+        pl = (playlist or "").strip()
+        if pl and pl.lower() not in ("all", "*"):
+            where.append("COALESCE(m.playlist, md.playlist, 'Unknown')=?")
+            params.append(pl)
+        if days and days > 0:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat()
+            where.append("m.played_at >= ?")
+            params.append(cutoff)
+
+        wh = " WHERE " + " AND ".join(where)
+        conn = self._conn()
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT m.result,
+                       COUNT(*) as n,
+                       ROUND(AVG(COALESCE(md.player_goals, m.user_score)), 2) as player_goals,
+                       ROUND(AVG(m.opponent_score), 2) as opponent_score,
+                       ROUND(AVG(md.shots), 2) as shots,
+                       ROUND(AVG(md.saves), 2) as saves,
+                       ROUND(AVG(md.assists), 2) as assists,
+                       ROUND(AVG(md.demos_given), 2) as demos_given,
+                       ROUND(AVG(md.demos_taken), 2) as demos_taken,
+                       ROUND(AVG(md.boost_avg), 1) as boost_avg,
+                       ROUND(AVG(md.boost_time_pct), 1) as boost_time_pct,
+                       ROUND(AVG(md.supersonic_time_pct), 1) as supersonic_time_pct,
+                       ROUND(AVG(md.air_time_pct), 1) as air_time_pct,
+                       ROUND(AVG(md.wall_time_pct), 1) as wall_time_pct,
+                       ROUND(SUM(COALESCE(md.player_goals, m.user_score)) * 100.0 / NULLIF(SUM(md.shots), 0), 1) as shot_accuracy
+                FROM matches m
+                LEFT JOIN match_details md ON md.match_id = m.id
+                {wh}
+                GROUP BY m.result
+                """,
+                params,
+            ).fetchall()
+        finally:
+            conn.close()
+
+        by_res = {r["result"]: dict(r) for r in rows}
+        w = by_res.get("win", {})
+        l = by_res.get("loss", {})
+        w_n = int(w.get("n") or 0)
+        l_n = int(l.get("n") or 0)
+
+        spec = [
+            ("player_goals", "Personal Goals / Match", ""),
+            ("opponent_score", "Goals Conceded / Match", ""),
+            ("shot_accuracy", "Shot Conversion", "%"),
+            ("shots", "Shots / Match", ""),
+            ("saves", "Saves / Match", ""),
+            ("boost_avg", "Average Boost", "%"),
+            ("boost_time_pct", "Time Boosting", "%"),
+            ("supersonic_time_pct", "Supersonic Time", "%"),
+            ("air_time_pct", "Air Time", "%"),
+            ("wall_time_pct", "Wall Time", "%"),
+            ("demos_given", "Demos Given", ""),
+            ("demos_taken", "Demos Taken", ""),
+        ]
+
+        metrics = []
+        for key, label, unit in spec:
+            wv = float(w.get(key) or 0.0)
+            lv = float(l.get(key) or 0.0)
+            if key == "shot_accuracy":
+                wv = min(wv, 100.0)
+                lv = min(lv, 100.0)
+            metrics.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "unit": unit,
+                    "win": round(wv, 1),
+                    "loss": round(lv, 1),
+                    "delta": round(wv - lv, 1),
+                }
+            )
+
+        insights: List[Dict[str, str]] = []
+        if w_n >= 1 and l_n >= 1:
+            m_map = {m["key"]: m for m in metrics}
+            if m_map["boost_avg"]["win"] - m_map["boost_avg"]["loss"] >= 3.0:
+                insights.append(
+                    {
+                        "severity": "good",
+                        "text": f"In Wins you hold {m_map['boost_avg']['win']}% avg boost vs {m_map['boost_avg']['loss']}% in Losses — boost discipline pays off.",
+                    }
+                )
+            elif m_map["boost_avg"]["loss"] - m_map["boost_avg"]["win"] >= 3.0:
+                insights.append(
+                    {
+                        "severity": "info",
+                        "text": f"You hold more reserve boost in Losses ({m_map['boost_avg']['loss']}%) than Wins ({m_map['boost_avg']['win']}%) — challenge sooner instead of hoarding.",
+                    }
+                )
+
+            if m_map["opponent_score"]["loss"] - m_map["opponent_score"]["win"] >= 1.5:
+                insights.append(
+                    {
+                        "severity": "warn",
+                        "text": f"Conceding {m_map['opponent_score']['loss']} goals/loss vs {m_map['opponent_score']['win']} goals/win — prioritize back-post rotation when behind.",
+                    }
+                )
+
+            if m_map["shot_accuracy"]["win"] - m_map["shot_accuracy"]["loss"] >= 8.0:
+                insights.append(
+                    {
+                        "severity": "good",
+                        "text": f"Shooting accuracy jumps from {m_map['shot_accuracy']['loss']}% in Losses to {m_map['shot_accuracy']['win']}% in Wins — quality shots win games.",
+                    }
+                )
+
+            if m_map["supersonic_time_pct"]["win"] - m_map["supersonic_time_pct"]["loss"] >= 2.0:
+                insights.append(
+                    {
+                        "severity": "good",
+                        "text": f"Faster recovery in Wins ({m_map['supersonic_time_pct']['win']}% supersonic vs {m_map['supersonic_time_pct']['loss']}% in Losses).",
+                    }
+                )
+
+            if m_map["demos_taken"]["loss"] - m_map["demos_taken"]["win"] >= 0.5:
+                insights.append(
+                    {
+                        "severity": "warn",
+                        "text": f"Demoed more in Losses ({m_map['demos_taken']['loss']}/game vs {m_map['demos_taken']['win']}/game) — check peripheral awareness on rotation.",
+                    }
+                )
+
+        if not insights:
+            if w_n == 0 or l_n == 0:
+                insights.append(
+                    {
+                        "severity": "info",
+                        "text": "Play both wins and losses under this filter to unlock Win-vs-Loss telemetry comparisons.",
+                    }
+                )
+            else:
+                insights.append(
+                    {
+                        "severity": "info",
+                        "text": "Win and Loss telemetry profiles are closely balanced — focus on reducing opponent counter-attacks.",
+                    }
+                )
+
+        return {
+            "wins_count": w_n,
+            "losses_count": l_n,
+            "metrics": metrics,
+            "insights": insights[:4],
+        }
+
     # ------------------------------------------------------------------ #
-    # Coach 2.0
+    # Coach 4.0 Session Report
     # ------------------------------------------------------------------ #
     def session_report(self, session_id: int, player_name: str = "You") -> Dict[str, Any]:
-        """Full Coach 2.0 report for a session (solo + optional teammate)."""
         conn = self._conn()
         try:
             sess = conn.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
@@ -234,13 +402,19 @@ class CoachEngine:
 
             rows = conn.execute(
                 """
-                SELECT m.*, md.shots, md.saves, md.assists, md.touches, md.car_touches,
+                SELECT m.*,
+                       md.shots, md.saves, md.assists, md.touches, md.car_touches,
                        md.demos_given, md.demos_taken, md.boost_avg, md.boost_time_pct,
                        md.supersonic_time_pct, md.air_time_pct, md.ground_time_pct,
-                       md.wall_time_pct, md.fastest_goal_kph, md.avg_shot_power,
-                       md.overtime, md.arena, md.playlist as md_playlist,
+                       md.wall_time_pct, md.powerslide_time_pct, md.fastest_goal_kph,
+                       md.avg_shot_power, md.overtime, md.arena, md.playlist as md_playlist,
+                       md.boost_pads, md.boost_pills, md.crossbar_hits, md.forfeit,
+                       md.player_goals, md.player_score, md.is_mvp,
                        md.teammate_name, md.teammate_shots, md.teammate_saves,
-                       md.teammate_assists, md.teammate_touches, md.teammate_demos
+                       md.teammate_assists, md.teammate_touches, md.teammate_demos,
+                       md.teammate_goals, md.teammate_score, md.teammate_boost_avg,
+                       md.teammate_air_pct, md.teammate_wall_pct, md.teammate_supersonic_pct,
+                       COALESCE(md.player_goals, m.user_score) as effective_goals
                 FROM matches m
                 LEFT JOIN match_details md ON md.match_id = m.id
                 WHERE m.session_id=?
@@ -258,16 +432,21 @@ class CoachEngine:
                     "summary": "No matches in this session yet.",
                     "players": [],
                     "session_tips": [],
+                    "radar": {
+                        "labels": ["Scoring", "Defense", "Boost", "Mechanics", "Pressure"],
+                        "session": [0, 0, 0, 0, 0],
+                        "baseline": [0, 0, 0, 0, 0],
+                    },
                 }
 
-            # Personal baseline: last 20 matches before this session
             first_at = matches[0]["played_at"]
             baseline_rows = conn.execute(
                 """
                 SELECT m.*, md.shots, md.saves, md.assists, md.touches,
                        md.demos_given, md.demos_taken, md.boost_avg, md.boost_time_pct,
                        md.supersonic_time_pct, md.air_time_pct, md.wall_time_pct,
-                       md.fastest_goal_kph, md.avg_shot_power
+                       md.powerslide_time_pct, md.fastest_goal_kph, md.avg_shot_power,
+                       md.player_goals, COALESCE(md.player_goals, m.user_score) as effective_goals
                 FROM matches m
                 LEFT JOIN match_details md ON md.match_id = m.id
                 WHERE m.played_at < ?
@@ -285,10 +464,40 @@ class CoachEngine:
                 use_user_fields=True,
             )
 
+            # Compute pure baseline category scores for the 5-axis radar overlay
+            if baseline:
+                base_rep = self._player_report(
+                    name="Baseline",
+                    role="baseline",
+                    matches=baseline,
+                    baseline=[],
+                    use_user_fields=True,
+                )
+                base_cats = base_rep["categories"]
+            else:
+                base_cats = you["categories"]
+
+            radar = {
+                "labels": ["Scoring", "Defense", "Boost", "Mechanics", "Pressure"],
+                "session": [
+                    you["categories"]["scoring"]["score"],
+                    you["categories"]["defense"]["score"],
+                    you["categories"]["boost"]["score"],
+                    you["categories"]["movement"]["score"],
+                    you["categories"]["aggression"]["score"],
+                ],
+                "baseline": [
+                    base_cats["scoring"]["score"],
+                    base_cats["defense"]["score"],
+                    base_cats["boost"]["score"],
+                    base_cats["movement"]["score"],
+                    base_cats["aggression"]["score"],
+                ],
+            }
+
             players = [you]
             mode = (sess["mode"] or matches[0].get("mode") or "solo").lower()
             friend = sess["friend_name"] or matches[0].get("friend_name") or ""
-            # teammate from details if present
             tname = friend
             for m in matches:
                 if m.get("teammate_name"):
@@ -299,7 +508,7 @@ class CoachEngine:
                     name=tname,
                     role="teammate",
                     matches=matches,
-                    baseline=[],  # no historical teammate baseline
+                    baseline=[],
                     use_user_fields=False,
                 )
                 players.append(tm)
@@ -318,6 +527,7 @@ class CoachEngine:
                 "summary": summary,
                 "players": players,
                 "session_tips": session_tips,
+                "radar": radar,
                 "match_count": len(matches),
                 "wins": sum(1 for m in matches if m.get("result") == "win"),
                 "losses": sum(1 for m in matches if m.get("result") == "loss"),
@@ -346,9 +556,10 @@ class CoachEngine:
         use_user_fields: bool,
     ) -> Dict[str, Any]:
         if use_user_fields:
-            goals = self._avg(matches, "user_score")
+            goals = self._avg(matches, "effective_goals")
             shots = self._avg(matches, "shots")
             saves = self._avg(matches, "saves")
+            assists = self._avg(matches, "assists")
             demos = self._avg(matches, "demos_given")
             demos_t = self._avg(matches, "demos_taken")
             boost = self._avg(matches, "boost_avg")
@@ -356,108 +567,133 @@ class CoachEngine:
             air = self._avg(matches, "air_time_pct")
             wall = self._avg(matches, "wall_time_pct")
             super_ = self._avg(matches, "supersonic_time_pct")
-            power = self._avg(matches, "avg_shot_power")
-            b_goals = self._avg(baseline, "user_score") if baseline else goals
-            b_shots = self._avg(baseline, "shots") if baseline else shots
+            powerslide = self._avg(matches, "powerslide_time_pct")
+            pads = self._avg(matches, "boost_pads")
+            pills = self._avg(matches, "boost_pills")
+
+            b_goals = self._avg(baseline, "effective_goals") if baseline else goals
             b_saves = self._avg(baseline, "saves") if baseline else saves
             b_demos = self._avg(baseline, "demos_given") if baseline else demos
-            b_boost = self._avg(baseline, "boost_avg") if baseline else boost
             b_boost_t = self._avg(baseline, "boost_time_pct") if baseline else boost_t
             b_air = self._avg(baseline, "air_time_pct") if baseline else air
             b_wall = self._avg(baseline, "wall_time_pct") if baseline else wall
             limited = False
         else:
-            # teammate fields
-            goals = 0.0  # not tracked per teammate reliably
+            # Duo teammate — full v4 telemetry when available, graceful fallback on v3 rows
+            goals = self._avg(matches, "teammate_goals")
             shots = self._avg(matches, "teammate_shots")
             saves = self._avg(matches, "teammate_saves")
+            assists = self._avg(matches, "teammate_assists")
             demos = self._avg(matches, "teammate_demos")
             demos_t = 0.0
-            boost = 0.0
+            boost = self._avg(matches, "teammate_boost_avg")
             boost_t = 0.0
-            air = 0.0
-            wall = 0.0
-            super_ = 0.0
-            power = 0.0
-            b_goals = b_shots = b_saves = b_demos = b_boost = b_boost_t = b_air = b_wall = 0.0
-            limited = shots == 0 and saves == 0 and demos == 0
+            air = self._avg(matches, "teammate_air_pct")
+            wall = self._avg(matches, "teammate_wall_pct")
+            super_ = self._avg(matches, "teammate_supersonic_pct")
+            powerslide = 0.0
+            pads = pills = 0.0
+            b_goals = b_saves = b_demos = b_boost_t = b_air = b_wall = 0.0
+            has_spec = boost > 0 or air > 0 or wall > 0 or super_ > 0
+            limited = not has_spec
 
         wins = sum(1 for m in matches if m.get("result") == "win")
         total = len(matches)
-        wr = (wins / total * 100) if total else 0
+        wr = (wins / total * 100) if total else 0.0
 
-        # Category scores 0-100 (heuristic)
-        # Scoring: goals/game + accuracy
-        acc = min((goals / max(shots, 0.5)) * 100, 100) if use_user_fields else 50
-        scoring = _clamp(35 + goals * 18 + acc * 0.25)
+        acc = min((goals / max(shots, 0.5)) * 100, 100.0) if (use_user_fields or not limited) else 50.0
+        scoring = _clamp(35 + goals * 18 + acc * 0.25 + assists * 6)
         if baseline and use_user_fields and b_goals > 0:
             scoring = _clamp(scoring * 0.7 + _clamp(50 + (goals / b_goals - 1) * 40) * 0.3)
 
-        defense = _clamp(40 + saves * 14 - demos_t * 4)
+        defense = _clamp(42 + saves * 14 - demos_t * 4)
         if baseline and use_user_fields and b_saves > 0:
             defense = _clamp(defense * 0.75 + _clamp(50 + (saves / max(b_saves, 0.1) - 1) * 35) * 0.25)
 
-        boost_score = _clamp(boost * 0.9 + boost_t * 0.8) if use_user_fields else 50
-        movement = _clamp(air * 1.1 + wall * 1.4 + super_ * 0.9) if use_user_fields else 50
-        aggression = _clamp(40 + demos * 16 + (shots * 2))
+        if use_user_fields:
+            boost_score = _clamp(28 + boost * 0.9 + boost_t * 1.1)
+            movement = _clamp(24 + air * 1.1 + wall * 1.4 + super_ * 1.1 + powerslide * 1.2)
+        elif not limited:
+            boost_score = _clamp(28 + boost * 1.25)
+            movement = _clamp(24 + air * 1.15 + wall * 1.4 + super_ * 1.1)
+        else:
+            boost_score = 50.0
+            movement = 50.0
 
-        # Winrate influence on overall
+        aggression = _clamp(40 + demos * 16 + shots * 2.5)
         wr_score = _clamp(wr)
 
         weights = {
             "scoring": 0.25,
-            "defense": 0.2,
+            "defense": 0.20,
             "boost": 0.15,
             "movement": 0.15,
-            "aggression": 0.1,
+            "aggression": 0.10,
             "results": 0.15,
         }
-        overall = (
-            scoring * weights["scoring"]
-            + defense * weights["defense"]
-            + boost_score * weights["boost"]
-            + movement * weights["movement"]
-            + aggression * weights["aggression"]
-            + wr_score * weights["results"]
+        overall = round(
+            _clamp(
+                scoring * weights["scoring"]
+                + defense * weights["defense"]
+                + boost_score * weights["boost"]
+                + movement * weights["movement"]
+                + aggression * weights["aggression"]
+                + wr_score * weights["results"]
+            )
         )
-        overall = round(_clamp(overall))
 
         cats = {
             "scoring": {
                 "score": round(scoring),
                 "trend": _trend(goals, b_goals) if use_user_fields else "flat",
-                "note": f"{goals:.1f} goals/game · {acc:.0f}% shot accuracy"
-                if use_user_fields
-                else f"{shots:.1f} shots/game (limited teammate data)",
+                "note": f"{goals:.1f} goals/g · {assists:.1f} ast · {acc:.0f}% acc"
+                if (use_user_fields or not limited)
+                else f"{shots:.1f} shots/g (legacy match)",
             },
             "defense": {
                 "score": round(defense),
                 "trend": _trend(saves, b_saves) if use_user_fields else "flat",
-                "note": f"{saves:.1f} saves/game"
-                + (f" · {demos_t:.1f} demos taken" if use_user_fields else ""),
+                "note": f"{saves:.1f} saves/g" + (f" · {demos_t:.1f} demoed" if use_user_fields else ""),
             },
             "boost": {
                 "score": round(boost_score),
                 "trend": _trend(boost_t, b_boost_t) if use_user_fields else "flat",
-                "note": f"Avg boost {boost:.0f}% · boosting {boost_t:.0f}% of time"
+                "note": f"Avg {boost:.0f}% · {boost_t:.0f}% active"
                 if use_user_fields
-                else "Boost data only available for you",
+                else (f"Avg boost {boost:.0f}%" if not limited else "Boost telemetry unavailable"),
             },
             "movement": {
                 "score": round(movement),
                 "trend": _trend(air + wall, b_air + b_wall) if use_user_fields else "flat",
                 "note": f"Air {air:.0f}% · Wall {wall:.0f}% · Super {super_:.0f}%"
-                if use_user_fields
-                else "Movement data only available for you",
+                if (use_user_fields or not limited)
+                else "Movement telemetry unavailable",
             },
             "aggression": {
                 "score": round(aggression),
                 "trend": _trend(demos, b_demos) if use_user_fields else "flat",
-                "note": f"{demos:.1f} demos/game · {shots:.1f} shots/game",
+                "note": f"{demos:.1f} demos/g · {shots:.1f} shots/g",
             },
         }
 
-        tips = self._tips_for_player(cats, use_user_fields, goals, shots, saves, boost_t, air, wall, demos, wr)
+        tips = self._tips_for_player(
+            cats,
+            use_user_fields,
+            goals,
+            shots,
+            saves,
+            boost_t,
+            air,
+            wall,
+            demos,
+            demos_t,
+            super_,
+            powerslide,
+            pads,
+            pills,
+            wr,
+            limited,
+        )
 
         return {
             "role": role,
@@ -471,149 +707,73 @@ class CoachEngine:
         }
 
     def _tips_for_player(
-        self, cats, is_you, goals, shots, saves, boost_t, air, wall, demos, wr
+        self,
+        cats,
+        is_you,
+        goals,
+        shots,
+        saves,
+        boost_t,
+        air,
+        wall,
+        demos,
+        demos_t,
+        super_,
+        powerslide,
+        pads,
+        pills,
+        wr,
+        limited,
     ) -> List[dict]:
-        tips = []
+        tips: List[dict] = []
         if not is_you:
-            if cats["aggression"]["score"] >= 75:
-                tips.append(
-                    {
-                        "severity": "good",
-                        "icon": "💥",
-                        "text": "Teammate pressure looks solid — demos/shots are contributing.",
-                    }
-                )
+            if cats["scoring"]["score"] >= 75:
+                tips.append({"severity": "good", "icon": "⚽", "text": f"Teammate finishing strong ({goals:.1f} goals/game) — feed mid passes."})
+            if cats["defense"]["score"] >= 75:
+                tips.append({"severity": "good", "icon": "🛡️", "text": f"Teammate anchoring defense ({saves:.1f} saves/game) — safe to pressure 1st man."})
             elif cats["aggression"]["score"] < 55:
-                tips.append(
-                    {
-                        "severity": "info",
-                        "icon": "🤝",
-                        "text": "Teammate stats look quiet — call for boosts and challenge together.",
-                    }
-                )
+                tips.append({"severity": "info", "icon": "🤝", "text": "Teammate play looks passive — communicate challenges and boost steals."})
             if not tips:
-                tips.append(
-                    {
-                        "severity": "info",
-                        "icon": "👥",
-                        "text": "Limited teammate telemetry — coach focuses on your habits in duo.",
-                    }
-                )
+                tips.append({"severity": "info", "icon": "👥", "text": "Duo synergy balanced — stagger rotations to avoid double-commits." if not limited else "Legacy match lacks teammate telemetry."})
             return tips[:4]
 
-        # YOU tips — concrete, ranked
         if boost_t < 12 and cats["boost"]["trend"] == "down":
-            tips.append(
-                {
-                    "severity": "warn",
-                    "icon": "⛽",
-                    "text": "Boost time is low vs your baseline — pad earlier and avoid dry challenges.",
-                }
-            )
+            tips.append({"severity": "warn", "icon": "⛽", "text": "Boost time dropped vs baseline — route small pads through mid instead of chasing corners."})
+        elif pills > 0 and pads > 0 and pads < pills * 1.5:
+            tips.append({"severity": "info", "icon": "⛽", "text": f"Heavy big-pill reliance ({pills:.0f} pills vs {pads:.0f} small pads/g) — weave small pads to stay in play."})
         elif cats["boost"]["score"] >= 80:
-            tips.append(
-                {
-                    "severity": "good",
-                    "icon": "⛽",
-                    "text": "Boost economy looks sharp — keep that pad route discipline.",
-                }
-            )
+            tips.append({"severity": "good", "icon": "⛽", "text": "Boost economy is sharp — pad routing keeps momentum alive."})
 
-        if wall < 3 and air < 20:
-            tips.append(
-                {
-                    "severity": "warn",
-                    "icon": "🧱",
-                    "text": "Very ground-heavy session — add wall reads and light aerials to open angles.",
-                }
-            )
+        if super_ >= 16 and powerslide >= 2.5:
+            tips.append({"severity": "good", "icon": "⚡", "text": f"High tempo mechanics ({super_:.0f}% supersonic, {powerslide:.1f}% powerslide recoveries)."})
+        elif wall < 3 and air < 20:
+            tips.append({"severity": "warn", "icon": "🧱", "text": "Ground-heavy session — add backboard/wall clears and fast aerial challenges."})
         elif wall >= 8 or air >= 30:
-            tips.append(
-                {
-                    "severity": "good",
-                    "icon": "✈️",
-                    "text": "Good vertical game (air/wall) — use it to fake and cut rotations.",
-                }
-            )
+            tips.append({"severity": "good", "icon": "✈️", "text": "Strong aerial/wall presence — mix in low fakes to punish pre-jumpers."})
 
         acc = (goals / max(shots, 0.5)) * 100
-        if shots >= 3 and acc < 25:
-            tips.append(
-                {
-                    "severity": "warn",
-                    "icon": "🎯",
-                    "text": "Lots of shots, low conversion — wait for corners / pass plays instead of low % spam.",
-                }
-            )
+        if shots >= 3 and acc < 24:
+            tips.append({"severity": "warn", "icon": "🎯", "text": f"Conversion at {acc:.0f}% across {shots:.1f} shots/g — look for infield passes or bounce shots."})
         elif goals >= 1.5:
-            tips.append(
-                {
-                    "severity": "good",
-                    "icon": "⚽",
-                    "text": "Scoring rate is healthy — keep finding those high-percentage touches.",
-                }
-            )
+            tips.append({"severity": "good", "icon": "⚽", "text": f"Clinical finishing ({goals:.1f} personal goals/game) — keep taking high-% touches."})
 
-        if saves >= 2.5:
-            tips.append(
-                {
-                    "severity": "good",
-                    "icon": "🛡️",
-                    "text": "Strong save volume — last-man positioning is carrying possessions.",
-                }
-            )
-        elif saves < 0.4 and wr < 45:
-            tips.append(
-                {
-                    "severity": "info",
-                    "icon": "🛡️",
-                    "text": "Few saves this session — shadow a bit deeper when teammate is committed.",
-                }
-            )
+        if saves >= 2.2:
+            tips.append({"severity": "good", "icon": "🛡️", "text": f"Brick wall in net ({saves:.1f} saves/game) — strong last-man shadow defense."})
+        elif saves < 0.5 and wr < 48:
+            tips.append({"severity": "info", "icon": "🛡️", "text": "Low save volume — rotate back-post earlier when teammate is 1st man."})
 
-        if demos >= 2:
-            tips.append(
-                {
-                    "severity": "good",
-                    "icon": "💥",
-                    "text": "Demo pressure is up — clear the goalie then rotate out fast.",
-                }
-            )
-        elif demos < 0.3 and cats["aggression"]["score"] < 55:
-            tips.append(
-                {
-                    "severity": "info",
-                    "icon": "💥",
-                    "text": "Low demo count — occasional bumps on kickoffs can free 50s.",
-                }
-            )
+        if demos - demos_t >= 1.5:
+            tips.append({"severity": "good", "icon": "💥", "text": f"Physical edge (+{demos - demos_t:.1f} demo diff/g) — disruptions are opening empty nets."})
+        elif demos_t >= 1.5 and demos_t > demos:
+            tips.append({"severity": "warn", "icon": "💥", "text": f"Getting demoed {demos_t:.1f}/g — use quick camera checks on goal-line rotations."})
 
         if wr >= 60:
-            tips.append(
-                {
-                    "severity": "good",
-                    "icon": "🔥",
-                    "text": "Winning session — bank the habits (boost + first touch) before queueing ranked.",
-                }
-            )
+            tips.append({"severity": "good", "icon": "🔥", "text": "Hot winrate — lock in this pace and positioning."})
         elif wr < 40 and len(tips) < 3:
-            tips.append(
-                {
-                    "severity": "warn",
-                    "icon": "📉",
-                    "text": "Rough W/L — slow the game: safe touches mid, force opponents to beat two layers.",
-                }
-            )
+            tips.append({"severity": "warn", "icon": "📉", "text": "Tough W/L stretch — slow 50/50s and force opponents to beat two defenders."})
 
-        # Ensure at least 2 tips
         if len(tips) < 2:
-            tips.append(
-                {
-                    "severity": "info",
-                    "icon": "🧠",
-                    "text": "Track 5 more matches so Coach can compare tighter against your baseline.",
-                }
-            )
+            tips.append({"severity": "info", "icon": "🧠", "text": "Keep grinding competitive games so Coach calibrates tighter personal baselines."})
         return tips[:5]
 
     def _session_summary(self, you: dict, matches: list, mode: str, friend: str) -> str:
@@ -621,51 +781,29 @@ class CoachEngine:
         g = you.get("grade", "—")
         n = len(matches)
         if wr >= 60:
-            tone = "Strong session"
+            tone = "Dominant session"
         elif wr >= 45:
-            tone = "Mixed session"
+            tone = "Competitive session"
         else:
-            tone = "Tough session"
-        duo = f" with {friend}" if mode == "duo" and friend else ""
+            tone = "Gritty session"
+        duo = f" w/ {friend}" if mode == "duo" and friend else ""
         weak = min(you["categories"].items(), key=lambda kv: kv[1]["score"])[0]
         strong = max(you["categories"].items(), key=lambda kv: kv[1]["score"])[0]
-        return (
-            f"{tone}{duo} — grade {g} over {n} games. "
-            f"Best: {strong}. Focus next: {weak}."
-        )
+        gword = "game" if n == 1 else "games"
+        return f"{tone}{duo} — Grade {g} ({n} {gword}). Peak: {strong}. Next focus: {weak}."
 
     def _session_level_tips(self, you: dict, matches: list) -> List[dict]:
         tips = []
         ot = sum(1 for m in matches if m.get("overtime"))
         if ot >= 2:
-            tips.append(
-                {
-                    "severity": "info",
-                    "icon": "⏱️",
-                    "text": f"{ot} overtimes — fatigue risk. Stretch, hydrate, keep first-man challenges clean.",
-                }
-            )
-        # late tilt: last 3 all losses
+            tips.append({"severity": "info", "icon": "⏱️", "text": f"{ot} overtimes this session — stay patient on kickoff and zero-second clears."})
         if len(matches) >= 3 and all(m.get("result") == "loss" for m in matches[-3:]):
-            tips.append(
-                {
-                    "severity": "warn",
-                    "icon": "🛑",
-                    "text": "Last 3 were losses — consider a short break before another queue.",
-                }
-            )
+            tips.append({"severity": "warn", "icon": "🛑", "text": "3-loss skid at session end — take a 5-minute reset in Freeplay before re-queueing."})
         if you.get("categories", {}).get("boost", {}).get("trend") == "down":
-            tips.append(
-                {
-                    "severity": "warn",
-                    "icon": "⛽",
-                    "text": "Boost trend down vs baseline across the session — pad starvation is compounding.",
-                }
-            )
+            tips.append({"severity": "warn", "icon": "⛽", "text": "Boost usage dipped below your 20-game baseline — watch out for starved rotations."})
         return tips[:3]
 
-    # ------------------------------------------------------------------ #
-    def _analyse(self, match, recent):
+    def _analyse(self, match: dict, recent: List[dict]):
         insights = []
 
         def col(row, name, default=0):
@@ -675,27 +813,23 @@ class CoachEngine:
                 v = default
             return v if v is not None else default
 
-        goals_val = col(match, "user_score")
+        goals_val = _effective_goals(match)
         demos_val = col(match, "demos_given")
         saves_val = col(match, "saves")
         boost_t = col(match, "boost_time_pct")
         fastest_goal = col(match, "fastest_goal_kph")
+        is_mvp = bool(col(match, "is_mvp"))
+
+        if is_mvp:
+            insights.append(self._insight(TYPE_MVP, "👑", "Match MVP!", "good", 1))
 
         n = len(recent)
         if n == 0:
             if fastest_goal and fastest_goal > 0:
-                insights.append(
-                    self._insight(
-                        TYPE_SPEED,
-                        "🚀",
-                        f"New speed record: {round(fastest_goal, 1)} km/h!",
-                        "info",
-                        round(fastest_goal, 1),
-                    )
-                )
+                insights.append(self._insight(TYPE_SPEED, "🚀", f"Top goal speed: {round(fastest_goal, 1)} km/h!", "info", round(fastest_goal, 1)))
             return insights, {"matches_compared": 0}
 
-        avg_goals = sum(col(r, "user_score") for r in recent) / n
+        avg_goals = sum(_effective_goals(r) for r in recent) / n
         avg_demos = sum(col(r, "demos_given") for r in recent) / n
         avg_saves = sum(col(r, "saves") for r in recent) / n
         avg_boost_t = sum(col(r, "boost_time_pct") for r in recent) / n
@@ -708,52 +842,18 @@ class CoachEngine:
             "avg_boost_time_pct": round(avg_boost_t, 2),
         }
 
-        if goals_val > avg_goals * 1.4 and goals_val > 0:
-            insights.append(
-                self._insight(
-                    TYPE_GOALS,
-                    "⚽",
-                    f"{goals_val} goals (avg {avg_goals:.1f})",
-                    "good" if goals_val >= avg_goals * 2 else "info",
-                    goals_val,
-                )
-            )
+        if goals_val > avg_goals * 1.4 and goals_val >= 2:
+            insights.append(self._insight(TYPE_GOALS, "⚽", f"{int(goals_val)} personal goals (avg {avg_goals:.1f})", "good" if goals_val >= avg_goals * 2 else "info", goals_val))
         if demos_val >= 2 and demos_val > avg_demos * 1.5:
-            insights.append(
-                self._insight(
-                    TYPE_DEMOS,
-                    "💥",
-                    f"{demos_val} demolishes!",
-                    "good" if demos_val >= 4 else "info",
-                    demos_val,
-                )
-            )
+            insights.append(self._insight(TYPE_DEMOS, "💥", f"{int(demos_val)} demolitions!", "good" if demos_val >= 4 else "info", demos_val))
         if saves_val >= 3 and saves_val > avg_saves * 2:
-            insights.append(
-                self._insight(TYPE_SAVES, "🛡️", f"{saves_val} saves!", "good", saves_val)
-            )
+            insights.append(self._insight(TYPE_SAVES, "🛡️", f"{int(saves_val)} clutch saves!", "good", saves_val))
         if avg_boost_t > 0 and boost_t < avg_boost_t * 0.60:
-            insights.append(
-                self._insight(
-                    TYPE_BOOST,
-                    "⚠️",
-                    f"Boost time dropped to {round(boost_t, 1)}% (avg {avg_boost_t:.1f}%)",
-                    "warn",
-                    round(boost_t, 1),
-                )
-            )
+            insights.append(self._insight(TYPE_BOOST, "⚠️", f"Boost time dropped to {round(boost_t, 1)}% (avg {avg_boost_t:.1f}%)", "warn", round(boost_t, 1)))
         if fastest_goal and fastest_goal > 0:
             prev_max = max((col(r, "fastest_goal_kph") for r in recent), default=0)
             if fastest_goal > prev_max:
-                insights.append(
-                    self._insight(
-                        TYPE_SPEED,
-                        "🚀",
-                        f"New speed record: {round(fastest_goal, 1)} km/h!",
-                        "good",
-                        round(fastest_goal, 1),
-                    )
-                )
+                insights.append(self._insight(TYPE_SPEED, "🚀", f"New personal speed record: {round(fastest_goal, 1)} km/h!", "good", round(fastest_goal, 1)))
         return insights, baseline
 
     def _insight(self, type_, icon, text, severity, value):

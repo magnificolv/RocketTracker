@@ -1,690 +1,281 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RL Tracker 3.1.0 · Starlight</title>
-<style>
-
-:root{
-  --bg:#050510;--bg2:#0a0a18;--card:rgba(18,18,42,.9);--card2:rgba(12,12,28,.94);
-  --border:rgba(99,102,241,.24);--border2:#2a2a48;
-  --text:#eef1ff;--muted:#9aa3c7;--soft:#b4bfd6;
-  --cyan:#22d3ee;--violet:#a78bfa;--orchid:#e879f9;--pink:#f472b6;
-  --blue:#38bdf8;--orange:#fb923c;--green:#4ade80;--red:#f87171;
-  --r:20px;--rsm:14px;--shadow:0 14px 44px rgba(0,0,0,.48);
-  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-  --grad:linear-gradient(115deg,#22d3ee,#a78bfa,#e879f9,#f472b6);
-}
-*{margin:0;padding:0;box-sizing:border-box}
-body{
-  font-family:var(--font);color:var(--text);min-height:100vh;
-  background:var(--bg);
-  background-image:
-    linear-gradient(180deg,rgba(5,5,16,.55),rgba(5,5,16,.84)),
-    url('fons.jpg'),
-    radial-gradient(ellipse 70% 50% at 50% -10%,rgba(99,102,241,.28),transparent 60%),
-    radial-gradient(ellipse 50% 40% at 80% 100%,rgba(232,121,249,.12),transparent 55%);
-  background-size:cover,cover,auto,auto;background-attachment:fixed;background-position:center;
-  padding:0 18px 100px;
-}
-/* ===== LIVE STATUS (premium pill) ===== */
-.listener-wrap{position:sticky;top:0;z-index:40;display:flex;justify-content:center;padding:12px 0 0;pointer-events:none}
-.listener-bar{
-  pointer-events:auto;display:inline-flex;align-items:center;gap:10px;
-  padding:10px 18px 10px 12px;border-radius:999px;
-  background:linear-gradient(135deg,rgba(16,16,36,.92),rgba(12,12,28,.95));
-  border:1px solid rgba(74,222,128,.28);
-  box-shadow:0 8px 28px rgba(0,0,0,.4),0 0 24px rgba(74,222,128,.08);
-  backdrop-filter:blur(16px);font-size:.78rem;font-weight:700;letter-spacing:.02em;
-}
-.listener-bar.state-off{border-color:rgba(154,163,199,.25);box-shadow:0 8px 28px rgba(0,0,0,.4)}
-.listener-bar.state-connecting{border-color:rgba(251,191,36,.35);box-shadow:0 8px 28px rgba(0,0,0,.4),0 0 20px rgba(251,191,36,.1)}
-.listener-bar.state-live{border-color:rgba(74,222,128,.4);box-shadow:0 8px 28px rgba(0,0,0,.4),0 0 28px rgba(74,222,128,.14)}
-.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.dot-live{background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 2s infinite}
-.dot-connecting{background:#fbbf24;box-shadow:0 0 10px #fbbf24;animation:pulse 1s infinite}
-.dot-off{background:var(--muted);box-shadow:none}
-.listener-bar .status-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.listener-bar.state-off .status-text{-webkit-text-fill-color:var(--muted);background:none}
-.listener-bar .status-chip{font-size:.65rem;padding:3px 8px;border-radius:999px;background:rgba(74,222,128,.12);color:var(--green);border:1px solid rgba(74,222,128,.25)}
-.listener-bar.state-off .status-chip{background:rgba(154,163,199,.1);color:var(--muted);border-color:rgba(154,163,199,.2)}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.92)}}
-/* ===== HEADER ===== */
-.header{text-align:center;padding:28px 0 16px;position:relative}
-.header-logo{width:64px;height:64px;border-radius:18px;vertical-align:middle;margin-right:12px;box-shadow:0 0 28px rgba(167,139,250,.35),0 0 48px rgba(34,211,238,.15)}
-.header h1{display:inline-block;vertical-align:middle;font-size:2.2rem;font-weight:800;letter-spacing:-.03em}
-.header h1 .accent{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 16px rgba(232,121,249,.35))}
-.header .subtitle{color:var(--soft);margin-top:8px;font-size:.92rem;text-shadow:0 0 18px rgba(129,140,248,.2)}
-.header .version{color:var(--muted);font-size:.7rem;margin-top:6px;opacity:.75}
-.header::after{content:'';display:block;width:140px;height:3px;margin:16px auto 0;border-radius:3px;background:var(--grad);opacity:.75}
-/* ===== NAV with SVG icons ===== */
-.nav{display:flex;justify-content:center;gap:6px;max-width:640px;margin:0 auto 26px;padding:6px;border-radius:999px;background:rgba(18,18,42,.78);border:1px solid var(--border);backdrop-filter:blur(14px);box-shadow:var(--shadow)}
-.nav-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 12px;border:none;border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:.86rem;font-weight:700;cursor:pointer;transition:.18s}
-.nav-btn .ni{width:18px;height:18px;display:inline-flex;opacity:.75}
-.nav-btn .ni svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.nav-btn:hover{color:var(--text)}.nav-btn:hover .ni{opacity:1}
-.nav-btn.active{background:linear-gradient(135deg,#6366f1,#a78bfa);color:#fff;box-shadow:0 4px 18px rgba(99,102,241,.35)}
-.nav-btn.active .ni{opacity:1}
-.container{max-width:780px;margin:0 auto}
-.panel{display:none}.panel.active{display:block}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px;margin-bottom:14px;backdrop-filter:blur(14px);box-shadow:var(--shadow);animation:in .28s ease}
-@keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-.card.win-card{border-left:4px solid var(--green)}.card.loss-card{border-left:4px solid var(--red)}
-.session-card{cursor:pointer;transition:.18s}.session-card:hover{transform:translateY(-2px);border-color:rgba(167,139,250,.45)}
-.btn{padding:10px 16px;border-radius:999px;border:1px solid transparent;cursor:pointer;font:inherit;font-size:.8rem;font-weight:700;transition:.18s;display:inline-flex;align-items:center;gap:6px}
-.btn-primary{background:linear-gradient(135deg,#6366f1,#a78bfa);color:#fff}
-.btn-primary:hover{box-shadow:0 6px 20px rgba(99,102,241,.35);transform:translateY(-1px)}
-.btn-ghost{background:rgba(255,255,255,.03);color:var(--soft);border-color:var(--border2)}
-.btn-ghost:hover{color:var(--text);border-color:var(--violet);background:rgba(167,139,250,.08)}
-.btn-danger{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.28)}
-.btn-danger:hover{background:rgba(248,113,113,.18);box-shadow:0 0 16px rgba(248,113,113,.15)}
-.btn-share{background:linear-gradient(135deg,#22d3ee,#a78bfa);color:#041018;box-shadow:0 4px 16px rgba(34,211,238,.2)}
-.btn-share:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(167,139,250,.3)}
-.input{width:100%;padding:11px 14px;background:rgba(8,8,18,.9);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font:inherit;outline:none}
-.input:focus{border-color:var(--violet)}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100}
-.modal{background:rgba(16,16,36,.97);border:1px solid rgba(167,139,250,.28);border-radius:var(--r);padding:26px;max-width:480px;width:92%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.55)}
-/* ===== FLOATING ACTION STACK ===== */
-.fab-stack{position:fixed;right:22px;bottom:22px;z-index:60;display:flex;flex-direction:column;gap:12px;align-items:flex-end}
-.settings-toggle{
-  width:52px;height:52px;border-radius:16px;border:1px solid var(--border);
-  background:rgba(18,18,42,.92);cursor:pointer;display:flex;align-items:center;justify-content:center;
-  font-size:1.25rem;color:var(--soft);backdrop-filter:blur(12px);box-shadow:var(--shadow);transition:.18s
-}
-.settings-toggle:hover{transform:translateY(-2px) scale(1.04);color:#fff;border-color:var(--violet)}
-.exit-btn{
-  display:inline-flex;align-items:center;gap:10px;padding:14px 20px;border-radius:16px;
-  border:1px solid rgba(248,113,113,.45);
-  background:linear-gradient(135deg,rgba(248,113,113,.22),rgba(127,29,29,.55));
-  color:#fecaca;font:inherit;font-size:.92rem;font-weight:800;letter-spacing:.02em;
-  cursor:pointer;backdrop-filter:blur(12px);
-  box-shadow:0 10px 32px rgba(248,113,113,.25),0 0 0 1px rgba(248,113,113,.1);
-  transition:.18s;min-width:148px;justify-content:center
-}
-.exit-btn:hover{transform:translateY(-2px) scale(1.03);background:linear-gradient(135deg,rgba(248,113,113,.35),rgba(153,27,27,.7));color:#fff;box-shadow:0 14px 36px rgba(248,113,113,.4)}
-.exit-btn .exit-ico{font-size:1.15rem}
-.exit-btn .exit-sub{display:block;font-size:.62rem;font-weight:600;opacity:.8;letter-spacing:.04em;text-transform:uppercase}
-.loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--muted)}
-.spinner{width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--violet);border-radius:50%;animation:spin .6s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.empty-state{text-align:center;padding:36px 16px;color:var(--muted)}
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
-.stat-card{background:var(--card2);border:1px solid var(--border);border-radius:var(--r);padding:18px;text-align:center}
-.stat-card h4{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
-.big-number{font-size:2.1rem;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.winrate-bar{height:6px;border-radius:3px;background:rgba(248,113,113,.15);overflow:hidden;margin-top:10px}
-.winrate-fill{height:100%;background:linear-gradient(90deg,var(--green),#22c55e)}
-.recent-form{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:8px}
-.form-dot{width:28px;height:28px;border-radius:50%;font-size:.62rem;font-weight:800;display:flex;align-items:center;justify-content:center}
-.form-dot.win{background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.35)}
-.form-dot.loss{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3)}
-.form-dot.placeholder{border:1px dashed var(--border2);color:transparent}
-.filters{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:0 0 16px}
-.chip{padding:7px 14px;border-radius:999px;border:1px solid var(--border2);background:rgba(12,12,28,.7);color:var(--muted);font-size:.75rem;font-weight:700;cursor:pointer;transition:.15s}
-.chip:hover{color:var(--text);border-color:var(--violet)}
-.chip.active{background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(167,139,250,.25));color:#fff;border-color:rgba(167,139,250,.55);box-shadow:0 0 16px rgba(167,139,250,.2)}
-.refresh-btn{display:inline-flex;align-items:center;gap:6px;margin:0 auto 14px;padding:8px 16px;border-radius:999px;border:1px solid rgba(129,140,248,.35);background:rgba(99,102,241,.12);color:#c7d2fe;font-weight:700;font-size:.8rem;cursor:pointer}
-/* ===== DEEP METRICS (modern) ===== */
-.deep-section{margin-top:18px}
-.deep-section h3{color:var(--soft);font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.deep-section h3::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--grad);box-shadow:0 0 10px rgba(167,139,250,.5)}
-.deep-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px}
-.metric-card{
-  position:relative;overflow:hidden;background:linear-gradient(160deg,rgba(14,14,30,.95),rgba(8,8,18,.98));
-  border:1px solid rgba(99,102,241,.18);border-radius:16px;padding:16px 12px 14px;text-align:center;
-  transition:.18s
-}
-.metric-card::before{content:'';position:absolute;inset:0 0 auto 0;height:2px;background:var(--grad);opacity:.55}
-.metric-card:hover{border-color:rgba(167,139,250,.4);transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.3)}
-.metric-ico{font-size:1rem;margin-bottom:6px;opacity:.9;filter:drop-shadow(0 0 8px rgba(167,139,250,.25))}
-.metric-value{font-size:1.35rem;font-weight:800;letter-spacing:-.02em;line-height:1.1}
-.metric-label{font-size:.68rem;color:var(--muted);margin-top:5px;text-transform:uppercase;letter-spacing:.05em}
-.metric-card.orange .metric-value{color:var(--orange)}.metric-card.blue .metric-value{color:var(--blue)}
-.metric-card.green .metric-value{color:var(--green)}.metric-card.red .metric-value{color:var(--red)}
-.metric-card.muted .metric-value{color:var(--muted);font-size:1.1rem;font-weight:700}
-.metric-bar{height:4px;border-radius:2px;background:var(--border2);margin-top:8px;overflow:hidden}
-.metric-bar-fill{height:100%;border-radius:2px;background:var(--grad)}
-/* ===== BADGES / MATCH ROW ===== */
-.session-badge{font-size:.68rem;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--border2);color:var(--soft)}
-.badge-active{color:var(--green);border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.08)}
-.badge-completed{color:var(--muted)}
-.stat-pill{
-  display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;
-  background:rgba(255,255,255,.04);border:1px solid rgba(99,102,241,.18);
-  font-size:.72rem;font-weight:700;color:var(--soft)
-}
-.stat-pill b{color:var(--text);font-weight:800}
-.stat-pill.g{border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.08)}
-.stat-pill.b{border-color:rgba(56,189,248,.25);background:rgba(56,189,248,.08)}
-.stat-pill.o{border-color:rgba(251,146,60,.25);background:rgba(251,146,60,.08)}
-.stat-pill.r{border-color:rgba(248,113,113,.25);background:rgba(248,113,113,.08)}
-.match-row{
-  cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:10px 14px;align-items:center;
-  padding:14px 12px;margin-top:8px;border-radius:14px;border:1px solid rgba(99,102,241,.12);
-  background:linear-gradient(135deg,rgba(16,16,34,.7),rgba(10,10,22,.85));transition:.15s
-}
-.match-row:hover{border-color:rgba(167,139,250,.35);background:linear-gradient(135deg,rgba(24,24,48,.85),rgba(14,14,30,.95));transform:translateX(2px)}
-.match-row .score{font-size:1.2rem;font-weight:800;letter-spacing:-.02em}
-.match-row .result-win{color:var(--green);font-weight:800;letter-spacing:.04em}
-.match-row .result-loss{color:var(--red);font-weight:800;letter-spacing:.04em}
-.match-row .result-draw{color:var(--muted);font-weight:800;letter-spacing:.04em}
-.match-row .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.match-detail-popup{display:none;grid-column:1/-1;background:rgba(8,8,18,.92);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-top:4px}
-.match-detail-popup.show{display:block;animation:in .2s ease}
-.toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:999px;padding:10px 22px;font-size:.84rem;font-weight:700;z-index:200;box-shadow:var(--shadow)}
-.grade-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;font-weight:800;font-size:.9rem;color:#041018}
-.tip{display:flex;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(8,8,18,.75);border-left:3px solid var(--violet);margin-bottom:8px;font-size:.86rem}
-.tip.warn{border-left-color:var(--orange)}.tip.good{border-left-color:var(--green)}.tip.info{border-left-color:var(--blue)}
-.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:.7rem;color:var(--muted);padding:8px 0;margin-top:6px;border-top:1px solid var(--border)}
-.streak-badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.72rem;font-weight:700;margin-top:6px}
-.streak-badge.hot{background:linear-gradient(135deg,#f97316,#ef4444);color:#fff}
-.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:12px 0}
-.cat{background:rgba(8,8,18,.8);border:1px solid var(--border2);border-radius:12px;padding:12px}
-.cat .s{font-size:1.4rem;font-weight:800}.cat .n{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.trend-up{color:var(--green)}.trend-down{color:var(--red)}.trend-flat{color:var(--muted)}
-.wl-line{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;font-size:.88rem}
-.wl-line .w{color:var(--green);font-weight:800}.wl-line .l{color:var(--red);font-weight:800}
-@media(max-width:560px){
-  .nav{flex-wrap:wrap;border-radius:18px}.nav-btn{flex:1 1 40%;border-radius:14px}
-  .header h1{font-size:1.55rem}
-  .exit-btn{min-width:0;padding:12px 14px;font-size:.82rem}
-  .match-row{grid-template-columns:1fr}
-}
-
-/* ===== Starlight icon system ===== */
-.ico{width:16px;height:16px;display:inline-block;vertical-align:-3px}
-.ico svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.metric-ico .ico{width:22px;height:22px;opacity:.95;filter:drop-shadow(0 0 10px rgba(167,139,250,.35))}
-.metric-ico{display:flex;justify-content:center;margin-bottom:8px}
-.wl-row{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
-.wl-pill{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:999px;font-weight:800;font-size:.95rem;border:1px solid transparent}
-.wl-pill.w{background:rgba(74,222,128,.12);border-color:rgba(74,222,128,.35);color:var(--green)}
-.wl-pill.l{background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.3);color:var(--red)}
-.wl-pill.r{background:rgba(34,211,238,.1);border-color:rgba(34,211,238,.28);color:var(--cyan)}
-.wl-pill .n{font-size:1.15rem;letter-spacing:-.02em}
-.stat-pill{gap:6px}
-.stat-pill .ico{width:13px;height:13px;opacity:.9}
-.tag{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:.7rem;font-weight:700;border:1px solid var(--border2);background:rgba(255,255,255,.04);color:var(--soft)}
-.tag.live{color:var(--green);border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.1)}
-.tag.solo,.tag.duo{color:var(--violet);border-color:rgba(167,139,250,.3);background:rgba(167,139,250,.1)}
-.btn .ico{width:15px;height:15px}
-.older-wrap{display:flex;justify-content:center;margin-top:16px}
-.btn-older{padding:12px 22px;border-radius:999px;border:1px solid rgba(167,139,250,.35);background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(167,139,250,.18));color:#e9e7ff;font-weight:800;font-size:.84rem;cursor:pointer;display:inline-flex;align-items:center;gap:8px;box-shadow:0 8px 24px rgba(99,102,241,.15)}
-.btn-older:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(167,139,250,.25)}
-.session-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
-.session-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
-.hi-line{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
-.hi-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:12px;background:rgba(8,8,18,.75);border:1px solid rgba(99,102,241,.18);font-size:.78rem;color:var(--soft)}
-.hi-chip b{color:var(--text)}
-
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RL Tracker 4.0.0 · Overdrive</title>
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="stylesheet" href="styles.css?v=4.0.0">
 </head>
 <body>
-<div class="listener-wrap">
-  <div class="listener-bar state-off" id="listener-bar">
-    <div class="dot dot-off" id="listener-dot"></div>
-    <span class="status-text" id="listener-msg">Auto-tracker: not running</span>
-    <span class="status-chip" id="listener-chip">IDLE</span>
-  </div>
-</div>
-<div class="header">
-  <img src="logo.png" class="header-logo" alt="RL Tracker">
-  <h1>Rocket League <span class="accent">Tracker</span></h1>
-  <p class="subtitle">Starlight edition · track the grind, share the session</p>
-  <p class="version">RL Tracker 3.1.0 <span id="update-badge" onclick="toggleSettings();setTimeout(checkForUpdates,250)" style="display:none;cursor:pointer;color:var(--orange);font-weight:700">● Update available</span></p>
-</div>
-<nav class="nav">
-  <button class="nav-btn active" data-tab="active-session"><span class="ni"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M14 10h4M14 14h4"/></svg></span>Session</button>
-  <button class="nav-btn" data-tab="history"><span class="ni"><svg viewBox="0 0 24 24"><path d="M4 4h12v16H4z"/><path d="M8 8h4M8 12h6M8 16h5"/><path d="M16 8h4v12h-4"/></svg></span>History</button>
-  <button class="nav-btn" data-tab="stats"><span class="ni"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Stats</button>
-  <button class="nav-btn" data-tab="coach"><span class="ni"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 4a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3M17 4a3 3 0 0 1 3 3v1a3 3 0 0 1-3 3"/></svg></span>Coach</button>
-</nav>
-<div class="container">
-  <div class="panel active" id="panel-active-session"><div id="active-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
-  <div class="panel" id="panel-history"><div id="history-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
-  <div class="panel" id="panel-stats"><div id="stats-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
-  <div class="panel" id="panel-coach"><div id="coach-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
-</div>
-<div id="toast-container"></div>
-<div class="fab-stack">
-  <button class="exit-btn" onclick="exitTracker()" title="Fully quit RL Tracker (not just the browser tab)">
-    <span class="exit-ico">⏻</span>
-    <span><span>Exit tracker</span><span class="exit-sub">closes app</span></span>
-  </button>
-  <button class="settings-toggle" onclick="toggleSettings()" title="Settings">⚙️</button>
-</div>
-<div class="modal-overlay" id="settings-modal" style="display:none"><div class="modal">
-  <h3 style="margin-bottom:14px">Settings</h3>
-  <label style="display:block;color:var(--soft);font-size:.8rem;margin-bottom:4px">Your Rocket League Name</label>
-  <input class="input" id="cfg-player-name" placeholder="e.g. Magnifico" style="margin-bottom:12px">
-  <label style="display:block;color:var(--soft);font-size:.8rem;margin-bottom:4px">Friend Names (one per line)</label>
-  <textarea class="input" id="cfg-friends" rows="3" style="margin-bottom:12px;resize:vertical"></textarea>
-  <div style="background:rgba(8,8,18,.8);border-radius:12px;padding:12px;margin-bottom:12px;border:1px solid var(--border2)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:700;font-size:.82rem">RL Stats API</span><span id="rl-config-badge" style="font-size:.7rem">Checking...</span></div>
-    <p id="rl-config-msg" style="font-size:.72rem;color:var(--muted);margin-bottom:8px"></p>
-    <div style="display:flex;gap:6px"><button class="btn btn-ghost" onclick="checkRlConfig()">Check</button><button class="btn btn-primary" onclick="createRlConfig()">Auto-Create</button></div>
-  </div>
-  <div style="background:rgba(8,8,18,.8);border-radius:12px;padding:12px;margin-bottom:14px;border:1px solid var(--border2)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:700;font-size:.82rem">Auto-Update</span><span id="update-badge-modal" style="font-size:.7rem">Not checked</span></div>
-    <button class="btn btn-ghost" onclick="checkForUpdates()">Check for Updates</button>
-    <div id="update-results" style="display:none;margin-top:10px;font-size:.78rem"></div>
-  </div>
-  <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost" onclick="toggleSettings()">Cancel</button><button class="btn btn-primary" onclick="saveSettings()">Save</button></div>
-</div></div>
-<script>
-let activeSessionId=null,activeSession=null,statsMode='all',statsPlaylist='all',playlistsCache=[],olderMatchesOffset=0;
+  <div class="bg-backdrop"></div>
 
-/* ---- SVG icons (Starlight) ---- */
-const ICO = {
-  win: '<svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 4a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3M17 4a3 3 0 0 1 3 3v1a3 3 0 0 1-3 3"/></svg>',
-  loss: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>',
-  goal: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5 7.5c2.5 1.5 5 2 7 2s4.5-.5 7-2M5 16.5c2.5-1.5 5-2 7-2s4.5.5 7 2"/></svg>',
-  shot: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
-  save: '<svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V7l8-4z"/></svg>',
-  demo: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 10-14h-7l0-6z"/></svg>',
-  boost: '<svg viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 9-12h-6l0-6z"/></svg>',
-  air: '<svg viewBox="0 0 24 24"><path d="M4 16c3-6 6-9 8-9s5 3 8 9"/><path d="M4 19h16"/><path d="M9 10l1.5-4h3L15 10"/></svg>',
-  wall: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 10h16M4 16h16M10 4v16M16 4v16"/></svg>',
-  ground: '<svg viewBox="0 0 24 24"><path d="M3 17h18"/><path d="M5 17l3-8h8l3 8"/><path d="M9 17v3M15 17v3"/></svg>',
-  super: '<svg viewBox="0 0 24 24"><path d="M13 2L3 14h8l-1 8 11-14h-8l0-6z"/></svg>',
-  touch: '<svg viewBox="0 0 24 24"><path d="M8 13V6a2 2 0 1 1 4 0v5"/><path d="M12 11V5a2 2 0 1 1 4 0v7"/><path d="M16 12V8a2 2 0 1 1 4 0v8a6 6 0 0 1-6 6h-2c-3 0-5-1.5-6.5-4L4 15"/></svg>',
-  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-  share: '<svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.5 13.5l7 4M15.5 6.5l-7 4"/></svg>',
-  coach: '<svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/></svg>',
-  trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
-  refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
-  older: '<svg viewBox="0 0 24 24"><path d="M4 6h12v14H4z"/><path d="M8 10h4M8 14h6"/><path d="M16 8h4v12h-4"/></svg>',
-  end: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
-  user: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4-6 8-6s6.5 2 8 6"/></svg>',
-  users: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 19c1-3.5 3-5 6.5-5s5.5 1.5 6.5 5M14 19c.5-2 1.8-3 4-3 1.5 0 2.7.6 3.5 2"/></svg>',
-  rocket: '<svg viewBox="0 0 24 24"><path d="M5 19l4-1 9-9a3 3 0 0 0-4-4l-9 9-1 4z"/><path d="M14 6l4 4"/><path d="M5 19l-2 2"/><path d="M9 15a3 3 0 0 0 4 4"/></svg>',
-  bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 10-14h-7l0-6z"/></svg>',
-  playlist: '<svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>',
-};
-
-function ic(name, cls='ico'){return `<span class="${cls}">${ICO[name]||ICO.bolt}</span>`}
-function n1(v){return Number(v||0)}
-function fmtKph(v){v=n1(v);return v>0?v.toFixed(1)+' km/h':'—'}
-function fmtPct(v){return n1(v).toFixed(1).replace(/\.0$/,'')+'%'}
-
-async function api(url,opts={}){
-  const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});
-  let d={}; try{d=await r.json()}catch(e){}
-  if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
-  return d;
-}
-function showToast(m){const e=document.createElement('div');e.className='toast';e.textContent=m;document.getElementById('toast-container').appendChild(e);setTimeout(()=>e.remove(),3200)}
-function formatDate(iso){try{return new Date(iso).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return iso}}
-function relativeTime(iso){const d=new Date(iso),n=new Date(),diff=Math.floor((n-d)/1000);if(diff<60)return'just now';if(diff<3600)return Math.floor(diff/60)+'m ago';if(diff<86400)return Math.floor(diff/3600)+'h ago';return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
-function gradeColor(g){g=(g||'').toUpperCase();if(g.startsWith('A'))return'var(--green)';if(g.startsWith('B'))return'var(--cyan)';if(g.startsWith('C'))return'var(--orange)';return'var(--red)'}
-function resultClass(r){return r==='win'?'result-win':r==='draw'?'result-draw':'result-loss'}
-function tagPills(m){
-  const t=m.tags||'';
-  if(!t) return '';
-  return String(t).split(',').filter(Boolean).map(x=>`<span class="tag">${x.trim()}</span>`).join('');
-}
-function trendIcon(t){return t==='up'?'↑':t==='down'?'↓':'→'}
-function trendClass(t){return t==='up'?'trend-up':t==='down'?'trend-down':'trend-flat'}
-
-function matchBadges(s){
-  return [
-    `<span class="stat-pill g">${ic('goal')} <b>${s.goals||0}</b></span>`,
-    `<span class="stat-pill b">${ic('shot')} <b>${s.shots||0}</b></span>`,
-    `<span class="stat-pill o">${ic('save')} <b>${s.saves||0}</b></span>`,
-    `<span class="stat-pill r">${ic('demo')} <b>${s.demos_given||0}</b></span>`,
-  ].join('');
-}
-function wlPills(w,l,t){
-  const wr=t?Math.round(w/t*100):0;
-  return `<div class="wl-row">
-    <span class="wl-pill w">${ic('win')}<span class="n">${w}</span> W</span>
-    <span class="wl-pill l">${ic('loss')}<span class="n">${l}</span> L</span>
-    <span class="wl-pill r"><span class="n">${wr}%</span> WR</span>
-  </div>`;
-}
-function mv(name,val,label,cls=''){
-  return `<div class="metric-card ${cls}"><div class="metric-ico">${ic(name)}</div><div class="metric-value">${val}</div><div class="metric-label">${label}</div></div>`;
-}
-/** Full deep stats — same structure as Stats tab */
-function renderDeepBlocks(a){
-  const fg=a.all_time_fastest_goal||a.fastest_goal_kph||0;
-  const asp=a.overall_avg_shot_power||a.avg_shot_power||0;
-  const sa=a.shot_accuracy!=null?a.shot_accuracy:0;
-  return `
-  <div class="deep-section"><h3>Shot Power & Accuracy</h3><div class="deep-metrics">
-    ${mv('rocket', fg>0?fmtKph(fg):'—','Fastest Goal',fg>0?'orange':'muted')}
-    ${mv('demo', asp>0?fmtKph(asp):'—','Avg Shot Power',asp>0?'blue':'muted')}
-    ${mv('shot', n1(sa)+'%','Accuracy','green')}
-    ${mv('shot', a.total_shots||0,'Total Shots','blue')}
-  </div></div>
-  <div class="deep-section"><h3>Movement & Boost</h3><div class="deep-metrics">
-    ${mv('boost', fmtPct(a.avg_boost),'Avg Boost','blue')}
-    ${mv('boost', fmtPct(a.avg_boost_time),'Boosting','')}
-    ${mv('super', fmtPct(a.avg_supersonic_time),'Supersonic','orange')}
-    ${mv('air', fmtPct(a.avg_air_time),'Air','')}
-    ${mv('ground', fmtPct(a.avg_ground_time),'Ground','')}
-    ${mv('wall', fmtPct(a.avg_wall_time),'Wall',n1(a.avg_wall_time)>0?'blue':'muted')}
-  </div></div>
-  <div class="deep-section"><h3>Combat & Ball</h3><div class="deep-metrics">
-    ${mv('demo', a.total_demos_given||a.demos_given||0,'Demos Given','green')}
-    ${mv('loss', a.total_demos_taken||a.demos_taken||0,'Demos Taken','red')}
-    ${mv('save', a.total_saves||a.saves||0,'Saves','')}
-    ${mv('clock', a.total_overtime||a.overtime||0,'Overtimes','')}
-    ${mv('shot', a.total_crossbars||a.crossbar_hits||0,'Crossbars','')}
-    ${mv('boost', a.total_boost_pills||a.boost_pills||0,'Big Boosts','')}
-    ${mv('touch', a.total_touches||a.touches||0,'Touches','')}
-    ${mv('touch', a.total_car_touches||a.car_touches||0,'Car Touches','')}
-    ${mv('users', a.total_assists||a.assists||0,'Assists','')}
-    ${mv('goal', a.total_goals||0,'Goals','green')}
-  </div></div>`;
-}
-
-document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.getElementById('panel-'+b.dataset.tab).classList.add('active');
-  if(b.dataset.tab==='active-session')loadActiveSession();
-  if(b.dataset.tab==='history')loadHistory();
-  if(b.dataset.tab==='stats')loadStats();
-  if(b.dataset.tab==='coach')loadCoach();
-}));
-
-async function loadActiveSession(){
-  const c=document.getElementById('active-content');
-  c.innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';
-  try{
-    const ss=await api('/api/sessions');const a=ss.find(s=>s.status==='active');
-    if(!a){activeSessionId=null;activeSession=null;c.innerHTML=`<div class="card" style="text-align:center"><h3 style="margin-bottom:10px">No active session</h3><p style="color:var(--muted)">Enter your RL name in Settings and start playing — sessions auto-create.</p></div>`;return}
-    activeSessionId=a.id;const f=await api('/api/sessions/'+a.id);activeSession=f;renderActiveSession(f);
-  }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
-}
-function renderActiveSession(s){
-  const ms=s.matches||[],w=s.wins||0,l=s.losses||0,t=w+l;
-  let h=`<div class="card ${t>0?(w>=l?'win-card':'loss-card'):''}">
-    <div class="session-head">
-      <div><h3 style="font-size:1.15rem">Active Session</h3>
-      <span style="color:var(--muted);font-size:.8rem">${formatDate(s.started_at)}</span>
-      <div class="session-meta">
-        <span class="tag ${s.mode==='duo'?'duo':'solo'}">${ic(s.mode==='duo'?'users':'user')} ${s.mode==='duo'?('Duo'+(s.friend_name?' · '+s.friend_name:'')):'Solo'}</span>
-        <span class="tag live">Live</span>
-      </div></div>
-      <button class="btn btn-danger" onclick="endSession()">${ic('end')} End Session</button>
-    </div>`;
-  if(t>0){
-    h+=wlPills(w,l,t);
-    h+=`<div class="actions" style="justify-content:center">
-        <button class="btn btn-share" onclick="shareSessionCard(${s.id})">${ic('share')} Share card</button>
-        <button class="btn btn-ghost" onclick="showCoachReport(${s.id})">${ic('coach')} Coach</button>
-      </div>
-      <div id="session-coach-box"></div>
-      <div id="session-deep-active"></div>`;
-    h+=ms.map((m,i)=>matchRowHtml(m,i)).join('');
-  }else h+=`<div class="empty-state" style="padding:18px"><p>No matches yet. Play a game!</p></div>`;
-  h+=`</div>`;document.getElementById('active-content').innerHTML=h;
-  if(t>0) loadSessionDeepStats(s.id,'session-deep-active');
-}
-function matchRowHtml(m,i){
-  return `<div class="match-row" onclick="toggleMatchDetail(${m.id},this)">
-      <div><div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Match ${i+1}</div>
-        <div class="score">${m.user_score} – ${m.opponent_score}</div></div>
-      <div class="meta">
-        <span class="${resultClass(m.result)}">${(m.result||'').toUpperCase()}</span>
-        <span class="tag">${ic('playlist')} ${m.playlist||'Unknown'}</span>
-        ${tagPills(m)}
-        ${matchBadges(m)}
-      </div>
-      <div style="color:var(--muted);font-size:.75rem">details</div>
-      <div class="match-detail-popup"></div></div>`;
-}
-async function endSession(){if(!confirm('End this session?'))return;try{await api('/api/sessions/'+activeSessionId+'/end',{method:'POST'});showToast('Session ended');activeSessionId=null;loadActiveSession()}catch(e){showToast('Error: '+e.message)}}
-
-async function loadHistory(){
-  const c=document.getElementById('history-content');
-  c.innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';
-  olderMatchesOffset=0;
-  try{
-    const ss=await api('/api/sessions');
-    if(!ss.length){c.innerHTML='<div class="empty-state"><h3>No sessions yet</h3><p>Play some Rocket League!</p></div>';return}
-    c.innerHTML=ss.map(s=>{
-      const w=s.wins||0,l=s.losses||0,t=w+l,wr=t?Math.round(w/t*100):0;
-      const accent=t>0&&w>=l?'var(--green)':t>0?'var(--red)':'var(--violet)';
-      return`<div class="card session-card" style="border-left:4px solid ${accent}" onclick="toggleSessionExpand(${s.id})">
-        <div class="session-head">
-          <span style="font-weight:700">${formatDate(s.started_at)}</span>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <span class="tag ${s.mode==='duo'?'duo':'solo'}">${ic(s.mode==='duo'?'users':'user')} ${s.mode==='duo'?('Duo'+(s.friend_name?' · '+s.friend_name:'')):'Solo'}</span>
-            <span class="tag ${s.status==='active'?'live':''}">${s.status==='active'?'Live':'Done'}</span>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="assets/logo-v4.png" class="brand-logo" alt="RL Tracker">
+        <div class="brand-text">
+          <div class="brand-title">Rocket League <span class="accent">Tracker</span></div>
+          <div class="brand-sub">
+            <span class="edition-pill">v4.0.0 · Overdrive</span>
+            <span id="scope-pill" class="scope-pill">Competitive Only</span>
+            <span id="update-badge" class="update-pill" style="display:none" onclick="openSettings('maintenance');setTimeout(checkForUpdates,200)">Update available</span>
           </div>
         </div>
-        <div class="session-meta">
-          <span class="tag">Matches <b style="margin-left:4px;color:var(--text)">${t}</b></span>
-          ${t?`<span class="wl-pill w" style="padding:4px 10px;font-size:.78rem">${ic('win')} ${w}W</span>
-               <span class="wl-pill l" style="padding:4px 10px;font-size:.78rem">${ic('loss')} ${l}L</span>
-               <span class="wl-pill r" style="padding:4px 10px;font-size:.78rem">${wr}%</span>`:
-               `<span style="color:var(--muted);font-size:.85rem">No matches</span>`}
-        </div>
-        <div class="session-expand" id="expand-${s.id}" onclick="event.stopPropagation()"></div>
-      </div>`}).join('')+`<div class="older-wrap"><button class="btn-older" onclick="loadOlderMatches()">${ic('older')} Load older matches</button></div><div id="older-matches-results"></div>`;
-  }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
-}
-async function toggleSessionExpand(sid){
-  const e=document.getElementById('expand-'+sid);
-  if(e.classList.contains('open')){e.classList.remove('open');e.innerHTML='';return}
-  document.querySelectorAll('.session-expand.open').forEach(el=>{el.classList.remove('open');el.innerHTML=''});
-  e.classList.add('open');e.innerHTML='<div class="loading" style="padding:12px"><div class="spinner"></div></div>';
-  try{
-    const s=await api('/api/sessions/'+sid),ms=s.matches||[];
-    let h=ms.length?ms.map((m,i)=>matchRowHtml(m,i)).join(''):'<p style="color:var(--muted);padding:10px;text-align:center">No matches</p>';
-    h+=`<div class="actions">
-      <button class="btn btn-share" onclick="shareSessionCard(${sid})">${ic('share')} Share card</button>
-      <button class="btn btn-ghost" onclick="showCoachReport(${sid},'expand-coach-${sid}')">${ic('coach')} Coach</button>
-      <button class="btn btn-danger" onclick="deleteSession(${sid})">${ic('trash')} Delete</button>
-    </div>
-    <div id="expand-coach-${sid}"></div>
-    <div id="session-deep-${sid}"></div>`;
-    e.innerHTML=h;loadSessionDeepStats(sid,'session-deep-'+sid);
-  }catch(err){e.innerHTML=`<p style="color:var(--red);padding:10px">${err.message}</p>`}
-}
-async function loadSessionDeepStats(sid, elId){
-  const c=document.getElementById(elId||('session-deep-'+sid));if(!c)return;
-  try{
-    const deep=await api('/api/sessions/'+sid+'/deep');const a=deep.aggregates||{};
-    if(!a.total_matches){c.innerHTML='';return}
-    c.innerHTML=`<div class="deep-section"><h3>Session deep stats</h3></div>`+renderDeepBlocks(a);
-  }catch(e){c.innerHTML=''}
-}
-async function deleteSession(sid){if(!confirm('Delete this entire session?'))return;try{await api('/api/sessions/'+sid,{method:'DELETE'});showToast('Session deleted');loadHistory()}catch(e){showToast('Error: '+e.message)}}
-async function loadOlderMatches(){
-  const c=document.getElementById('older-matches-results');
-  try{
-    const r=await api('/api/matches/summaries?offset='+olderMatchesOffset+'&limit=50');const sums=r.summaries||[];
-    if(!sums.length){c.insertAdjacentHTML('beforeend','<p style="color:var(--muted);text-align:center;padding:12px">No more matches</p>');return}
-    c.insertAdjacentHTML('beforeend',sums.map(s=>{
-      const accent=s.result==='win'?'var(--green)':s.result==='draw'?'var(--muted)':'var(--red)';
-      return`<div class="card" style="border-left:4px solid ${accent}">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-          <div><span class="score" style="font-size:1.1rem">${s.user_score} – ${s.opponent_score}</span>
-            <span class="${resultClass(s.result)}" style="margin-left:10px">${(s.result||'').toUpperCase()}</span></div>
-          <span style="color:var(--muted);font-size:.75rem">${relativeTime(s.played_at)}</span>
-        </div>
-        <div class="hi-line">
-          <span class="hi-chip">${s.highlight_text||'Highlight'}: <b>${s.highlight_value||0}</b></span>
-          <span class="tag">${ic('playlist')} ${s.playlist||'Unknown'}</span>
-          ${matchBadges(s)}
-        </div>
-      </div>`}).join(''));
-    olderMatchesOffset+=sums.length;
-  }catch(e){showToast('Error: '+e.message)}
-}
-
-async function loadStats(){
-  const c=document.getElementById('stats-content');
-  c.innerHTML='<div class="loading"><div class="spinner"></div>Loading stats...</div>';
-  try{
-    if(!playlistsCache.length){try{const pl=await api('/api/stats/playlists');playlistsCache=pl.playlists||[]}catch(e){}}
-    const q=new URLSearchParams();if(statsMode!=='all')q.set('mode',statsMode);if(statsPlaylist!=='all')q.set('playlist',statsPlaylist);
-    const qs=q.toString()?('?'+q.toString()):'';
-    const s=await api('/api/stats'+qs);const t=s.overall.total||0;
-    const chipsMode=[['all','All'],['solo','Solo'],['duo','Duo']].map(([v,l])=>`<button class="chip ${statsMode===v?'active':''}" onclick="statsMode='${v}';loadStats()">${l}</button>`).join('');
-    const chipsPl=[`<button class="chip ${statsPlaylist==='all'?'active':''}" onclick="statsPlaylist='all';loadStats()">All playlists</button>`]
-      .concat(playlistsCache.map(p=>`<button class="chip ${statsPlaylist===p.playlist?'active':''}" onclick="statsPlaylist='${String(p.playlist).replace(/'/g,"\'")}';loadStats()">${p.playlist} (${p.total})</button>`)).join('');
-    if(!t){c.innerHTML=`<div style="text-align:center"><button class="refresh-btn" onclick="loadStats()">${ic('refresh')} Refresh Stats</button></div><div class="filters">${chipsMode}</div><div class="filters">${chipsPl}</div><div class="empty-state"><h3>No stats for this filter</h3></div>`;return}
-    const owr=Math.round((s.overall.wins||0)/t*100),swr=s.solo.total?Math.round(s.solo.wins/s.solo.total*100):0,dwr=s.duo.total?Math.round(s.duo.wins/s.duo.total*100):0;
-    const buildForm=rs=>{const dots=rs.map(r=>`<div class="form-dot ${r}">${r==='win'?'W':'L'}</div>`);while(dots.length<20)dots.push('<div class="form-dot placeholder">-</div>');return dots.join('')};
-    const calcStreak=rs=>{let n=0;for(const r of (rs||[])){if(r!=='win')break;n++}return n};
-    const soloHtml=buildForm((s.recent_solo||[]).slice().reverse());const duoHtml=buildForm((s.recent_duo||[]).slice().reverse());
-    const ss=calcStreak(s.recent_solo||[]),ds=calcStreak(s.recent_duo||[]);
-    c.innerHTML=`<div style="text-align:center"><button class="refresh-btn" onclick="loadStats()">${ic('refresh')} Refresh Stats</button></div>
-      <div class="filters">${chipsMode}</div><div class="filters">${chipsPl}</div>
-      <div class="stats-grid">
-        <div class="stat-card ${owr>=50?'win-card':'loss-card'}"><h4>Filtered</h4><div class="big-number">${owr}%</div><div style="color:var(--soft);font-size:.8rem">${s.overall.wins||0}W · ${s.overall.losses||0}L · ${t} games</div><div class="winrate-bar"><div class="winrate-fill" style="width:${owr}%"></div></div></div>
-        <div class="stat-card ${swr>=50?'win-card':'loss-card'}"><h4>${ic('user')} Solo</h4><div class="big-number">${swr}%</div><div style="color:var(--soft);font-size:.8rem">${s.solo.wins||0}W · ${s.solo.losses||0}L</div>
-          <div class="recent-form">${soloHtml}</div>${ss>=3?`<div class="streak-badge hot">${ss} W streak</div>`:''}</div>
-        <div class="stat-card ${dwr>=50?'win-card':'loss-card'}"><h4>${ic('users')} Duo</h4><div class="big-number">${dwr}%</div><div style="color:var(--soft);font-size:.8rem">${s.duo.wins||0}W · ${s.duo.losses||0}L</div>
-          <div class="recent-form">${duoHtml}</div>${ds>=3?`<div class="streak-badge hot">${ds} W streak</div>`:''}</div>
-      </div><div id="deep-stats-container"></div>`;
-    loadDeepStats(qs);
-  }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
-}
-async function loadDeepStats(qs=''){
-  const c=document.getElementById('deep-stats-container');if(!c)return;
-  try{
-    const deep=await api('/api/stats/deep'+qs);const a=deep.aggregates||{};
-    if(!a.total_matches){c.innerHTML='';return}
-    c.innerHTML=renderDeepBlocks(a);
-  }catch(e){c.innerHTML='<p style="color:var(--red);text-align:center">Deep stats unavailable</p>'}
-}
-
-async function loadCoach(){
-  const c=document.getElementById('coach-content');
-  c.innerHTML='<div class="loading"><div class="spinner"></div>Loading coach...</div>';
-  try{
-    const r=await api('/api/coach/records');const rec=r.records||{};const tm=rec.total_matches||0;
-    const ss=await api('/api/sessions');
-    const withMatches=ss.filter(s=>(s.wins||0)+(s.losses||0)>0).slice(0,8);
-    let sessionPick=withMatches.map(s=>`<button class="chip" onclick="showCoachReport(${s.id},'coach-report-root')">${formatDate(s.started_at)} · ${(s.wins||0)}-${(s.losses||0)}</button>`).join('');
-    if(!tm){c.innerHTML='<div class="empty-state"><h3>Coach is warming up</h3><p>Play at least one match.</p></div>';return}
-    const wr=rec.total_wins||0,lo=rec.total_losses||0,wrPct=tm?Math.round(wr/tm*100):0;
-    const cards=[
-      {ico:'goal',label:'Most Goals',value:rec.most_goals?.value||0},
-      {ico:'demo',label:'Most Demos',value:rec.most_demos?.value||0},
-      {ico:'save',label:'Most Saves',value:rec.most_saves?.value||0},
-      {ico:'rocket',label:'Fastest Goal',value:rec.fastest_goal_kph?.value||0,unit:' km/h'},
-      {ico:'shot',label:'Most Shots',value:rec.most_shots?.value||0},
-      {ico:'boost',label:'Top Boost Time',value:rec.highest_boost_time_pct?.value||0,unit:'%'},
-    ].filter(k=>k.value).map(k=>mv(k.ico, `${k.value}${k.unit||''}`, k.label, '')).join('');
-    c.innerHTML=`<div class="card" style="border-left:4px solid ${wrPct>=50?'var(--green)':'var(--red)'}">
-      <h4 style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Career</h4>
-      ${wlPills(wr,lo,tm)}
-      <div class="winrate-bar"><div class="winrate-fill" style="width:${wrPct}%"></div></div>
-      <p style="color:var(--muted);font-size:.72rem;margin-top:8px;text-align:center">${tm} matches tracked</p></div>
-      <div class="card"><h3 style="margin-bottom:12px">${ic('win')} All-time records</h3><div class="deep-metrics">${cards||'<p style="color:var(--muted)">No records yet</p>'}</div></div>
-      <div class="card"><h3 style="margin-bottom:10px">${ic('coach')} Coach 2.0 — session report</h3>
-      <p style="color:var(--muted);font-size:.8rem;margin-bottom:10px">Pick a session for grades + tips (solo or each player in duo).</p>
-      <div class="filters" style="justify-content:flex-start">${sessionPick||'<span style="color:var(--muted)">No sessions yet</span>'}</div>
-      <div id="coach-report-root"></div></div>`;
-  }catch(e){c.innerHTML=`<div class="empty-state"><p>Error: ${e.message}</p></div>`}
-}
-function renderCoachReport(rep){
-  if(rep.error)return`<p style="color:var(--red)">${rep.error}</p>`;
-  const gcol=gradeColor(rep.overall_grade);
-  let h=`<div style="margin-top:12px;padding:14px;border-radius:14px;background:rgba(8,8,18,.75);border:1px solid var(--border)">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <div><div class="grade-pill" style="background:${gcol}">COACH ${rep.overall_grade} · ${rep.overall_score||0}</div>
-      <p style="margin-top:8px;color:var(--soft);font-size:.88rem">${rep.summary||''}</p></div>
-      <div style="color:var(--muted);font-size:.8rem">${rep.wins||0}W-${rep.losses||0}L · ${rep.match_count||0} matches · ${(rep.mode||'').toUpperCase()}</div>
-    </div>`;
-  (rep.players||[]).forEach(p=>{
-    h+=`<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <strong>${ic(p.role==='you'?'user':'users')} ${p.name}</strong>
-        <span class="grade-pill" style="background:${gradeColor(p.grade)};font-size:.78rem">${p.grade} · ${p.score}</span>
       </div>
-      ${p.limited_data?'<p style="color:var(--muted);font-size:.75rem;margin-bottom:8px">Limited teammate telemetry</p>':''}
-      <div class="cat-grid">${Object.entries(p.categories||{}).map(([k,v])=>`<div class="cat"><div class="n">${k}</div><div class="s">${v.score} <span class="${trendClass(v.trend)}">${trendIcon(v.trend)}</span></div><div style="font-size:.72rem;color:var(--muted);margin-top:4px">${v.note||''}</div></div>`).join('')}</div>
-      ${(p.tips||[]).map(t=>`<div class="tip ${t.severity||'info'}"><span>${t.icon||'•'}</span><span>${t.text}</span></div>`).join('')}
-    </div>`;
-  });
-  (rep.session_tips||[]).forEach(t=>{h+=`<div class="tip ${t.severity||'info'}"><span>${t.icon||'•'}</span><span>${t.text}</span></div>`});
-  h+='</div>';return h;
-}
-async function showCoachReport(sid, targetId){
-  const id=targetId||'session-coach-box';
-  let box=document.getElementById(id);
-  if(!box){const c=document.getElementById('active-content');if(c){const d=document.createElement('div');d.id=id;c.querySelector('.card')?.appendChild(d);box=d}}
-  if(!box)return;box.innerHTML='<div class="loading" style="padding:12px"><div class="spinner"></div></div>';
-  try{const rep=await api('/api/coach/session/'+sid+'/report');box.innerHTML=renderCoachReport(rep)}catch(e){box.innerHTML=`<p style="color:var(--red)">${e.message}</p>`}
-}
-async function shareSessionCard(sid){
-  showToast('Rendering session card...');
-  try{
-    const r=await fetch('/api/sessions/'+sid+'/card.png');
-    if(!r.ok)throw new Error('Card failed');
-    const blob=await r.blob();const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=`rl-session-${sid}.png`;a.click();
-    window.open(url,'_blank');
-    showToast('Session card ready — drop it in Discord!');
-  }catch(e){showToast('Error: '+e.message)}
-}
-async function toggleMatchDetail(mid,el){
-  const popup=el.querySelector('.match-detail-popup');
-  if(popup.classList.contains('show')){popup.classList.remove('show');popup.innerHTML='';return}
-  popup.classList.add('show');popup.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div></div>';
-  try{
-    const r=await api('/api/matches/'+mid);const d=r.details||{};
-    const totalShots=d.shots||0;const userGoals=r.match.user_score||0;
-    const sa=totalShots?Math.min(Math.round(userGoals/Math.max(totalShots,1)*100),100):0;
-    let coachHtml='';
-    try{const cr=await api('/api/coach/match/'+mid);const ins=cr.insights||[];if(ins.length){coachHtml=`<div class="deep-section"><h3>Coach</h3>${ins.map(i=>`<div class="tip ${i.severity||'info'}"><span>${i.icon||'•'}</span><span>${i.text}</span></div>`).join('')}</div>`}}catch(e){}
-    const a={
-      fastest_goal_kph:d.fastest_goal_kph, avg_shot_power:d.avg_shot_power, shot_accuracy:sa,
-      total_shots:totalShots, avg_boost:d.boost_avg, avg_boost_time:d.boost_time_pct,
-      avg_supersonic_time:d.supersonic_time_pct, avg_air_time:d.air_time_pct,
-      avg_ground_time:d.ground_time_pct, avg_wall_time:d.wall_time_pct,
-      demos_given:d.demos_given, demos_taken:d.demos_taken, saves:d.saves,
-      overtime:d.overtime, touches:d.touches, car_touches:d.car_touches, assists:d.assists,
-      total_goals:userGoals, total_matches:1
-    };
-    popup.innerHTML=coachHtml+renderDeepBlocks(a);
-  }catch(e){popup.innerHTML=`<p style="color:var(--red)">${e.message}</p>`}
-}
-function pollListenerStatus(){api('/api/listener-status').then(s=>updateListenerUI(s)).catch(()=>updateListenerUI({state:'not_running'}))}
-function updateListenerUI(s){
-  const d=document.getElementById('listener-dot'),m=document.getElementById('listener-msg');
-  const bar=document.getElementById('listener-bar'),chip=document.getElementById('listener-chip');
-  d.className='dot';bar.className='listener-bar';
-  const set=(dot,state,text,chipText)=>{d.classList.add(dot);bar.classList.add(state);m.textContent=text;if(chip)chip.textContent=chipText};
-  switch(s.state){
-    case'connected':set('dot-live','state-live','Live — auto-tracking matches','LIVE');break;
-    case'connecting':case'starting':set('dot-connecting','state-connecting','Connecting to Rocket League...','WAIT');break;
-    case'no_player':set('dot-off','state-off','Player name not set — open Settings','SETUP');break;
-    case'disconnected':set('dot-off','state-off','RL not running (port 49123 closed)','OFF');break;
-    default:set('dot-off','state-off',s.message||s.state||'unknown','—');
-  }
-}
-function toggleSettings(){const m=document.getElementById('settings-modal');if(m.style.display==='flex'){m.style.display='none';return}api('/api/config').then(c=>{document.getElementById('cfg-player-name').value=c.name||'';document.getElementById('cfg-friends').value=(c.friends||[]).join('\n')}).catch(()=>{});m.style.display='flex';checkRlConfig()}
-async function saveSettings(){const n=document.getElementById('cfg-player-name').value.trim(),fr=document.getElementById('cfg-friends').value.trim(),fs=fr?fr.split('\n').map(f=>f.trim()).filter(Boolean):[];try{await api('/api/config',{method:'POST',body:JSON.stringify({name:n,friends:fs})});showToast('Settings saved');toggleSettings();setTimeout(pollListenerStatus,2000)}catch(e){showToast('Error: '+e.message)}}
-async function checkRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');b.textContent='Checking...';try{const s=await api('/api/rl-config');if(!s.config_dir_found){b.textContent='Not Found';m.textContent='RL Config folder not found'}else if(!s.ini_exists){b.textContent='Missing';m.textContent='TAStatsAPI.ini missing — Auto-Create'}else if(!s.ini_correct){b.textContent='Wrong';m.textContent='INI incomplete — Auto-Create'}else{b.textContent='OK';m.textContent=s.ini_read_by_rl?'INI OK (RL has read it)':'INI OK — restart RL if port closed'}}catch(e){b.textContent='Error';m.textContent=e.message}}
-async function createRlConfig(){const b=document.getElementById('rl-config-badge'),m=document.getElementById('rl-config-msg');try{const r=await api('/api/rl-config',{method:'POST'});if(r.created){b.textContent='Created';m.textContent='Restart Rocket League fully';showToast('Restart RL')}else{b.textContent='Failed';m.textContent=r.message}}catch(e){b.textContent='Error';m.textContent=e.message}}
-async function exitTracker(){if(!confirm('Exit RL Tracker completely? (Closing the browser tab is not enough)'))return;try{await api('/api/quit',{method:'POST'})}catch(e){}showToast('Shutting down...');setTimeout(()=>window.close(),500)}
-async function checkForUpdates(){
-  const box=document.getElementById('update-results');const badge=document.getElementById('update-badge-modal');
-  box.style.display='block';box.innerHTML='<div class="loading" style="padding:8px"><div class="spinner"></div></div>';
-  try{const d=await api('/api/check-update');renderUpdateResult(d)}catch(e){box.innerHTML='<p style="color:var(--red)">'+e.message+'</p>'}
-}
-function renderUpdateResult(d){
-  const box=document.getElementById('update-results');const badge=document.getElementById('update-badge-modal');
-  if(!d.ok){box.innerHTML='<p style="color:var(--red)">'+(d.error||'fail')+'</p>';return}
-  if(d.update_available){if(badge)badge.textContent='v'+d.latest+' available';box.innerHTML=`<div style="padding:10px;border:1px solid var(--orange);border-radius:10px;background:rgba(251,146,60,.08)"><b style="color:var(--orange)">Update available</b><div style="font-size:.75rem;margin-top:4px">v${d.current} → <b>v${d.latest}</b></div><button class="btn btn-share" style="margin-top:8px;width:100%" onclick="performUpdate()">One-Click Update</button><div id="update-progress" style="display:none;margin-top:8px"></div></div>`}
-  else{if(badge){badge.textContent='Up to date';badge.style.color='var(--green)'}box.innerHTML=`<div style="padding:10px;border:1px solid var(--green);border-radius:10px;color:var(--green)">Up to date (v${d.current})</div>`}
-}
-async function silentUpdateCheck(){try{const d=await api('/api/check-update');if(d.ok&&d.update_available){const b=document.getElementById('update-badge');if(b){b.style.display='inline';b.textContent='Update available (v'+d.latest+')'}}}catch(e){}}
-async function performUpdate(){const prog=document.getElementById('update-progress');if(!prog)return;prog.style.display='block';prog.innerHTML='Downloading...';try{const r=await api('/api/update',{method:'POST'});prog.innerHTML=r.ok?r.message:('Failed: '+(r.error||''));if(r.ok)showToast('Updated to v'+r.new_version)}catch(e){if((e.message||'').includes('not reachable')){prog.innerHTML='Restarting...';showToast('Restarting')}else prog.innerHTML=e.message}}
-document.getElementById('settings-modal').addEventListener('click',function(e){if(e.target===this)this.style.display='none'});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('settings-modal').style.display='none'});
-loadActiveSession();setInterval(pollListenerStatus,10000);pollListenerStatus();silentUpdateCheck();
-(async()=>{try{const c=await api('/api/config');if(!c.name)setTimeout(()=>{toggleSettings();showToast('Welcome! Enter your RL nickname.')},1200)}catch(e){}})();
-</script>
+
+      <nav class="nav" role="tablist">
+        <button class="nav-btn active" data-tab="active-session">
+          <img src="assets/icons/game.png" class="pack-ico" width="20" height="20" alt="">
+          <span>Session</span>
+        </button>
+        <button class="nav-btn" data-tab="history">
+          <img src="assets/icons/clock.png" class="pack-ico" width="20" height="20" alt="">
+          <span>History</span>
+        </button>
+        <button class="nav-btn" data-tab="stats">
+          <img src="assets/icons/rocket.png" class="pack-ico" width="20" height="20" alt="">
+          <span>Analytics</span>
+        </button>
+        <button class="nav-btn" data-tab="coach">
+          <img src="assets/icons/ai.png" class="pack-ico" width="20" height="20" alt="">
+          <span>Coach</span>
+        </button>
+      </nav>
+
+      <div class="topbar-right">
+        <div class="listener-bar state-off" id="listener-bar">
+          <div class="dot dot-off" id="listener-dot"></div>
+          <span class="status-text" id="listener-msg">Initializing...</span>
+          <span class="status-chip" id="listener-chip">IDLE</span>
+        </div>
+        <button class="icon-btn" onclick="openSettings('profile')" title="Settings">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1.02 1.4 1.13.2.04.41.06.61.06H21a2 2 0 1 1 0 4h-.09c-.66 0-1.26.4-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="panel active" id="panel-active-session">
+      <div id="live-hud-root"></div>
+      <div id="active-content"><div class="loading"><div class="spinner"></div>Loading session...</div></div>
+    </section>
+
+    <section class="panel" id="panel-history">
+      <div id="history-content"><div class="loading"><div class="spinner"></div>Loading history...</div></div>
+    </section>
+
+    <section class="panel" id="panel-stats">
+      <div id="stats-content"><div class="loading"><div class="spinner"></div>Loading analytics...</div></div>
+    </section>
+
+    <section class="panel" id="panel-coach">
+      <div id="coach-content"><div class="loading"><div class="spinner"></div>Loading Coach 4.0...</div></div>
+    </section>
+  </main>
+
+  <div id="toast-container"></div>
+
+  <div class="fab-stack">
+    <button class="exit-btn" onclick="confirmExitTracker()" title="Quit RL Tracker completely">
+      <span class="exit-ico">⏻</span>
+      <span><span>Exit tracker</span><span class="exit-sub">closes app</span></span>
+    </button>
+  </div>
+
+  <!-- Custom Confirm Modal -->
+  <div class="modal-overlay" id="confirm-modal" style="display:none">
+    <div class="modal modal-sm">
+      <h3 id="confirm-title" style="margin-bottom:8px">Confirm Action</h3>
+      <p id="confirm-body" style="color:var(--soft);font-size:.9rem;line-height:1.5;margin-bottom:18px"></p>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeConfirm(false)">Cancel</button>
+        <button class="btn btn-danger" id="confirm-ok-btn" onclick="closeConfirm(true)">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Match Modal -->
+  <div class="modal-overlay" id="edit-match-modal" style="display:none">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h3>Edit Match</h3>
+        <button class="icon-btn-sm" onclick="closeEditMatch()">✕</button>
+      </div>
+      <input type="hidden" id="edit-match-id">
+      <div class="form-grid">
+        <div>
+          <label class="field-label">Result</label>
+          <select class="input" id="edit-match-result">
+            <option value="win">WIN</option>
+            <option value="loss">LOSS</option>
+            <option value="draw">DRAW</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Playlist</label>
+          <input class="input" id="edit-match-playlist" placeholder="Ranked 2v2">
+        </div>
+        <div>
+          <label class="field-label">Your Team Score</label>
+          <input class="input" type="number" min="0" id="edit-match-us">
+        </div>
+        <div>
+          <label class="field-label">Opponent Score</label>
+          <input class="input" type="number" min="0" id="edit-match-opp">
+        </div>
+      </div>
+      <label class="field-label" style="margin-top:12px">Tags (comma separated)</label>
+      <input class="input" id="edit-match-tags" placeholder="Overtime, MVP">
+      <div class="modal-footer" style="margin-top:18px">
+        <button class="btn btn-ghost" onclick="closeEditMatch()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEditMatch()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabbed Settings Modal -->
+  <div class="modal-overlay" id="settings-modal" style="display:none">
+    <div class="modal modal-lg">
+      <div class="modal-head">
+        <div>
+          <h3>Tracker Settings</h3>
+          <p style="font-size:.76rem;color:var(--muted);margin-top:2px">Hot-reloaded every 2 seconds without restarting</p>
+        </div>
+        <button class="icon-btn-sm" onclick="closeSettings()">✕</button>
+      </div>
+
+      <div class="modal-tabs">
+        <button class="mtab active" data-stab="profile" onclick="switchSettingsTab('profile')">Profile &amp; Duo</button>
+        <button class="mtab" data-stab="filter" onclick="switchSettingsTab('filter')">Match Filter</button>
+        <button class="mtab" data-stab="diagnostics" onclick="switchSettingsTab('diagnostics')">RL API &amp; Logs</button>
+        <button class="mtab" data-stab="maintenance" onclick="switchSettingsTab('maintenance')">DB &amp; Updates</button>
+      </div>
+
+      <div class="stab-panel active" id="stab-profile">
+        <label class="field-label">Your Primary Rocket League Nickname</label>
+        <input class="input" id="cfg-player-name" placeholder="e.g. MagnificoLV" style="margin-bottom:12px">
+
+        <label class="field-label">Alt Accounts / Aliases (one per line — optional)</label>
+        <textarea class="input" id="cfg-aliases" rows="2" placeholder="e.g. Magnificox" style="margin-bottom:12px;resize:vertical"></textarea>
+
+        <label class="field-label">Duo Friend Names (one per line)</label>
+        <textarea class="input" id="cfg-friends" rows="3" placeholder="TeammateEpicName" style="margin-bottom:8px;resize:vertical"></textarea>
+        <p class="hint-text">Matches played with a listed friend on your team automatically tag as Duo and track full teammate telemetry.</p>
+      </div>
+
+      <div class="stab-panel" id="stab-filter">
+        <p class="hint-text" style="margin-bottom:12px">
+          Freeplay, Custom Training, Exhibition, Offline Bots, and Saved Replays are <strong>always ignored</strong> so practice never pollutes your stats.
+        </p>
+        <div class="scope-cards">
+          <label class="scope-card">
+            <input type="radio" name="cfg-scope" value="competitive" onchange="updateFilterVisibility()">
+            <div>
+              <strong>Competitive Only (Default)</strong>
+              <span>Ranked 1v1, 2v2, 3v3, 4v4, Ranked Extra Modes &amp; Tournaments only.</span>
+            </div>
+          </label>
+          <label class="scope-card">
+            <input type="radio" name="cfg-scope" value="all_online" onchange="updateFilterVisibility()">
+            <div>
+              <strong>All Online Matches</strong>
+              <span>Records Ranked + Casual online matchmaking games. Private &amp; Practice still ignored.</span>
+            </div>
+          </label>
+          <label class="scope-card">
+            <input type="radio" name="cfg-scope" value="custom" onchange="updateFilterVisibility()">
+            <div>
+              <strong>Custom Mode Selection</strong>
+              <span>Choose exactly which online playlist groups to record below.</span>
+            </div>
+          </label>
+        </div>
+
+        <div id="custom-filter-toggles" class="toggle-grid" style="margin-top:14px">
+          <label class="toggle-row"><input type="checkbox" id="cfg-inc-core"><span>Core Ranked (1v1 / 2v2 / 3v3 / 4v4)</span></label>
+          <label class="toggle-row"><input type="checkbox" id="cfg-inc-extra"><span>Extra Ranked (Hoops / Rumble / Dropshot / Snow Day)</span></label>
+          <label class="toggle-row"><input type="checkbox" id="cfg-inc-tourney"><span>Competitive Tournaments</span></label>
+          <label class="toggle-row"><input type="checkbox" id="cfg-inc-casual"><span>Casual &amp; LTMs</span></label>
+          <label class="toggle-row"><input type="checkbox" id="cfg-inc-private"><span>Private Matches (online)</span></label>
+        </div>
+      </div>
+
+      <div class="stab-panel" id="stab-diagnostics">
+        <div class="diag-box">
+          <div class="diag-row">
+            <div>
+              <strong>TAStatsAPI.ini &amp; Port 49123</strong>
+              <p id="rl-config-msg" class="hint-text" style="margin-top:3px">Checking...</p>
+            </div>
+            <span id="rl-config-badge" class="tag">Checking...</span>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button class="btn btn-ghost" onclick="loadDiagnostics()">Refresh Diagnostics</button>
+            <button class="btn btn-primary" onclick="createRlConfig()">Auto-Create / Repair INI</button>
+          </div>
+          <div id="diag-extra" class="hint-text" style="margin-top:10px"></div>
+        </div>
+        <label class="field-label" style="margin-top:12px">Listener Log Tail (latest 45 lines)</label>
+        <pre id="diag-log-tail" class="log-box">Loading logs...</pre>
+      </div>
+
+      <div class="stab-panel" id="stab-maintenance">
+        <div class="diag-box" style="margin-bottom:12px">
+          <div class="diag-row">
+            <div>
+              <strong>Cleanup Non-Competitive Legacy Matches</strong>
+              <p class="hint-text" style="margin-top:3px">Find and remove Casual, Practice, or Unknown legacy matches from your DB.</p>
+            </div>
+            <span id="cleanup-count-badge" class="tag">—</span>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button class="btn btn-ghost" onclick="previewCleanup()">Preview Matches</button>
+            <button class="btn btn-danger" id="btn-run-cleanup" style="display:none" onclick="runCleanup()">Delete Non-Competitive</button>
+          </div>
+          <div id="cleanup-preview" class="hint-text" style="margin-top:8px"></div>
+        </div>
+
+        <div class="diag-box" style="margin-bottom:12px">
+          <div class="diag-row">
+            <div>
+              <strong>Database Tools</strong>
+              <p class="hint-text" style="margin-top:3px">Create a clean SQLite backup or repair inverted W/L scores.</p>
+            </div>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button class="btn btn-ghost" onclick="window.location.href='/api/maintenance/backup-db'">Download DB Backup</button>
+            <button class="btn btn-ghost" onclick="repairResultsNow()">Repair Inverted W/L</button>
+          </div>
+        </div>
+
+        <div class="diag-box">
+          <div class="diag-row">
+            <div>
+              <strong>Auto-Update (GitHub Releases)</strong>
+              <p class="hint-text" style="margin-top:3px">Preserves <code>data-v2.db</code> and <code>config.yaml</code>.</p>
+            </div>
+            <span id="update-badge-modal" class="tag">Not checked</span>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button class="btn btn-ghost" onclick="checkForUpdates()">Check for Updates</button>
+          </div>
+          <div id="update-results" style="display:none;margin-top:10px;font-size:.8rem"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="margin-top:16px">
+        <button class="btn btn-ghost" onclick="closeSettings()">Close</button>
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="charts.js?v=4.0.0"></script>
+  <script src="app.js?v=4.0.0"></script>
 </body>
 </html>

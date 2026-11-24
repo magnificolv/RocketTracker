@@ -7,4 +7,14 @@ app:
 
 player:
   name: ""
+  aliases: []
+  primary_ids: []
   friends: []
+
+tracking:
+  scope: competitive
+  include_core_ranked: true
+  include_extra_ranked: true
+  include_tournaments: true
+  include_casual: false
+  include_private: false
