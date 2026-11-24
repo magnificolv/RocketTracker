@@ -4,18 +4,20 @@ Direct non-blocking TCP connection to RL Stats API (127.0.0.1:49123).
 """
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import re
 import select
 import socket
 import sqlite3
+import stat
 import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from coach import CoachEngine
 from field_resolver import FieldResolver
@@ -82,6 +84,7 @@ _live_state: Dict[str, Any] = {
     "version": APP_VERSION,
     "connection_state": "starting",
     "message": "Initializing...",
+    "rl_running": False,
     "player": "",
     "friends": [],
     "tracking_scope": "competitive",
@@ -132,45 +135,315 @@ def _update_live_fields(**fields: Any) -> None:
         _live_state["updated_at"] = datetime.now(timezone.utc).isoformat()
 
 
-def find_rl_config_dir() -> Optional[Path]:
-    candidates = [
-        Path(os.environ.get("USERPROFILE", "")) / "Documents" / "My Games" / "Rocket League" / "TAGame" / "Config",
-        Path.home() / "Documents" / "My Games" / "Rocket League" / "TAGame" / "Config",
+def _windows_documents_dir() -> Optional[Path]:
+    """Resolve real Windows Documents folder (handles OneDrive / custom folder redirection)."""
+    if sys.platform == "win32":
+        try:
+            buf = ctypes.create_unicode_buffer(260)
+            # CSIDL_PERSONAL = 5 (My Documents)
+            if ctypes.windll.shell32.SHGetFolderPathW(0, 5, 0, 0, buf) == 0 and buf.value:
+                p = Path(buf.value)
+                if p.exists():
+                    return p
+        except Exception:
+            pass
+        try:
+            import winreg
+
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+            )
+            raw, _ = winreg.QueryValueEx(key, "Personal")
+            expanded = Path(os.path.expandvars(str(raw)))
+            if expanded.exists():
+                return expanded
+        except Exception:
+            pass
+    fallback = Path.home() / "Documents"
+    return fallback if fallback.exists() else None
+
+
+def find_rl_config_dirs() -> List[Path]:
+    """Find all existing Rocket League TAGame/Config user directories (deduplicated)."""
+    docs_candidates: List[Optional[Path]] = [
+        _windows_documents_dir(),
+        Path(os.environ.get("USERPROFILE", "")) / "OneDrive" / "Documents" if os.environ.get("USERPROFILE") else None,
+        Path(os.environ.get("USERPROFILE", "")) / "Documents" if os.environ.get("USERPROFILE") else None,
+        Path.home() / "Documents",
+        Path.home() / "OneDrive" / "Documents",
     ]
-    for c in candidates:
-        if c.exists():
-            return c
+    found: List[Path] = []
+    seen: set[str] = set()
+    for base in docs_candidates:
+        if not base:
+            continue
+        cfg = base / "My Games" / "Rocket League" / "TAGame" / "Config"
+        if not cfg.exists():
+            continue
+        try:
+            key = str(cfg.resolve()).lower()
+        except Exception:
+            key = str(cfg).lower()
+        if key not in seen:
+            seen.add(key)
+            found.append(cfg)
+    return found
+
+
+def find_rl_config_dir() -> Optional[Path]:
+    dirs = find_rl_config_dirs()
+    return dirs[0] if dirs else None
+
+
+def _steam_roots() -> List[Path]:
+    roots: List[Path] = []
+    seen: set[str] = set()
+
+    def _add(p: Optional[Path]) -> None:
+        if not p or not p.exists():
+            return
+        try:
+            key = str(p.resolve()).lower()
+        except Exception:
+            key = str(p).lower()
+        if key not in seen:
+            seen.add(key)
+            roots.append(p)
+
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            for root_hive, subkey, val in (
+                (winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),
+                (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
+                (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam", "InstallPath"),
+            ):
+                try:
+                    k = winreg.OpenKey(root_hive, subkey)
+                    s, _ = winreg.QueryValueEx(k, val)
+                    if s:
+                        _add(Path(str(s)))
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    for d in (
+        Path(r"C:\Program Files (x86)\Steam"),
+        Path(r"C:\Program Files\Steam"),
+    ):
+        _add(d)
+    return roots
+
+
+def _find_steam_rl_dirs(extra_steam_roots: Optional[List[Path]] = None) -> List[Path]:
+    """Parse Steam libraryfolders.vdf + appmanifest_252950.acf across all drives."""
+    roots = list(extra_steam_roots) if extra_steam_roots is not None else _steam_roots()
+    libraries: List[Path] = []
+    seen_libs: set[str] = set()
+
+    def _add_lib(p: Path) -> None:
+        if not p.exists():
+            return
+        try:
+            key = str(p.resolve()).lower()
+        except Exception:
+            key = str(p).lower()
+        if key not in seen_libs:
+            seen_libs.add(key)
+            libraries.append(p)
+
+    for root in roots:
+        _add_lib(root)
+        vdf = root / "steamapps" / "libraryfolders.vdf"
+        if vdf.exists():
+            try:
+                txt = vdf.read_text(encoding="utf-8", errors="replace")
+                for m in re.finditer(r'"path"\s+"([^"]+)"', txt, re.IGNORECASE):
+                    raw_path = m.group(1).replace("\\\\", "\\")
+                    _add_lib(Path(raw_path))
+            except Exception:
+                pass
+
+    found: List[Path] = []
+    seen_rl: set[str] = set()
+    for lib in libraries:
+        installdir = "rocketleague"
+        acf = lib / "steamapps" / "appmanifest_252950.acf"
+        if acf.exists():
+            try:
+                acf_txt = acf.read_text(encoding="utf-8", errors="replace")
+                m = re.search(r'"installdir"\s+"([^"]+)"', acf_txt, re.IGNORECASE)
+                if m and m.group(1).strip():
+                    installdir = m.group(1).strip()
+            except Exception:
+                pass
+        for candidate in (
+            lib / "steamapps" / "common" / installdir,
+            lib / "steamapps" / "common" / "rocketleague",
+        ):
+            if candidate.exists():
+                try:
+                    key = str(candidate.resolve()).lower()
+                except Exception:
+                    key = str(candidate).lower()
+                if key not in seen_rl:
+                    seen_rl.add(key)
+                    found.append(candidate)
+    return found
+
+
+def _iter_rl_pids() -> List[int]:
+    """Return PIDs for running RocketLeague.exe using Win32 Toolhelp snapshot (no console popup)."""
+    if sys.platform != "win32":
+        return []
+    pids: List[int] = []
+    try:
+        TH32CS_SNAPPROCESS = 0x00000002
+
+        class PROCESSENTRY32W(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", ctypes.c_uint32),
+                ("cntUsage", ctypes.c_uint32),
+                ("th32ProcessID", ctypes.c_uint32),
+                ("th32DefaultHeapID", ctypes.c_void_p),
+                ("th32ModuleID", ctypes.c_uint32),
+                ("cntThreads", ctypes.c_uint32),
+                ("th32ParentProcessID", ctypes.c_uint32),
+                ("pcPriClassBase", ctypes.c_long),
+                ("dwFlags", ctypes.c_uint32),
+                ("szExeFile", ctypes.c_wchar * 260),
+            ]
+
+        k32 = ctypes.windll.kernel32
+        snap = k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if snap == ctypes.c_void_p(-1).value or snap == -1:
+            return []
+        try:
+            entry = PROCESSENTRY32W()
+            entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+            ok = k32.Process32FirstW(snap, ctypes.byref(entry))
+            while ok:
+                if entry.szExeFile.lower() == "rocketleague.exe":
+                    pids.append(int(entry.th32ProcessID))
+                ok = k32.Process32NextW(snap, ctypes.byref(entry))
+        finally:
+            k32.CloseHandle(snap)
+    except Exception:
+        pass
+    return pids
+
+
+def is_rl_process_running() -> bool:
+    return bool(_iter_rl_pids())
+
+
+def _find_running_rl_dir() -> Optional[Path]:
+    if sys.platform != "win32":
+        return None
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    k32 = ctypes.windll.kernel32
+    for pid in _iter_rl_pids():
+        h = None
+        try:
+            h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not h:
+                continue
+            size = ctypes.c_uint32(1024)
+            buf = ctypes.create_unicode_buffer(1024)
+            if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)) and buf.value:
+                exe = Path(buf.value)
+                # <RL>/Binaries/Win64/RocketLeague.exe -> <RL>
+                if exe.parent.name.lower() == "win64" and exe.parent.parent.name.lower() == "binaries":
+                    rl_dir = exe.parent.parent.parent
+                    if rl_dir.exists():
+                        return rl_dir
+        except Exception:
+            continue
+        finally:
+            if h:
+                try:
+                    k32.CloseHandle(h)
+                except Exception:
+                    pass
     return None
+
+
+def _parse_launch_log(config_dirs: Optional[List[Path]] = None) -> Dict[str, Any]:
+    """Read RL's Launch.log for exact base directory, Steam/Epic client, and StatsAPI active status."""
+    out: Dict[str, Any] = {
+        "last_launch_base_dir": None,
+        "last_launch_client": "Unknown",
+        "last_launch_statsapi": None,
+        "last_launch_rate": None,
+        "last_launch_port": None,
+    }
+    dirs = config_dirs if config_dirs is not None else find_rl_config_dirs()
+    log_candidates = [d.parent / "Logs" / "Launch.log" for d in dirs]
+    log_file = next((p for p in log_candidates if p.exists()), None)
+    if not log_file:
+        return out
+    try:
+        txt = log_file.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return out
+
+    m_base = re.search(r"Init:\s+Base directory:\s+(.+)", txt)
+    if m_base:
+        base_raw = m_base.group(1).strip().rstrip("\\/")
+        # Strip \Binaries\Win64
+        rl_root = re.sub(r"[\\/]Binaries[\\/]Win64$", "", base_raw, flags=re.IGNORECASE)
+        out["last_launch_base_dir"] = rl_root
+        low = rl_root.lower()
+        if "steam" in low:
+            out["last_launch_client"] = "Steam"
+        elif "epic" in low or "-epicportal" in txt.lower() or "prod/epic" in txt.lower():
+            out["last_launch_client"] = "Epic"
+    elif "-epicportal" in txt.lower():
+        out["last_launch_client"] = "Epic"
+
+    matches = list(
+        re.finditer(
+            r"StatsAPI:\s+PacketSendRate=\(([^)]+)\)\s+Port=\(([^)]+)\)(?:\s+WebPort=\(([^)]+)\))?",
+            txt,
+        )
+    )
+    if matches:
+        last = matches[-1]
+        out["last_launch_statsapi"] = last.group(0).strip()
+        try:
+            out["last_launch_rate"] = float(last.group(1))
+        except (TypeError, ValueError):
+            pass
+        try:
+            out["last_launch_port"] = int(float(last.group(2)))
+        except (TypeError, ValueError):
+            pass
+    return out
 
 
 def find_rl_install_dirs() -> List[Path]:
     found: List[Path] = []
     seen: set[str] = set()
 
-    def _add(p: Path) -> None:
+    def _add(p: Optional[Path]) -> None:
+        if not p or not p.exists():
+            return
         try:
             rp = str(p.resolve()).lower()
         except Exception:
             rp = str(p).lower()
-        if rp not in seen and p.exists():
+        if rp not in seen:
             seen.add(rp)
             found.append(p)
 
-    # Steam registry
-    if sys.platform == "win32":
-        try:
-            import winreg
+    # 1. Steam libraryfolders.vdf + appmanifest_252950.acf across all drives
+    for sp in _find_steam_rl_dirs():
+        _add(sp)
 
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam\Apps\252950")
-            rl_dir_str, _ = winreg.QueryValueEx(key, "InstalledDepots")
-            for line in str(rl_dir_str).splitlines():
-                parts = line.strip().split()
-                if parts and parts[0] == "252950":
-                    _add(Path(parts[-1].strip('"')))
-        except Exception:
-            pass
-
-    # Epic Games manifests
+    # 2. Epic Games manifests
     manifests_dir = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "Epic" / "EpicGamesLauncher" / "Data" / "Manifests"
     if manifests_dir.exists():
         for item_file in manifests_dir.glob("*.item"):
@@ -184,44 +457,94 @@ def find_rl_install_dirs() -> List[Path]:
             except Exception:
                 continue
 
-    # Common defaults
-    for default_dir in (
-        Path(r"C:\Program Files\Epic Games\rocketleague"),
-        Path(r"D:\Games\rocketleague"),
-        Path(r"D:\Epic Games\rocketleague"),
-        Path(r"C:\Program Files (x86)\Steam\steamapps\common\rocketleague"),
-        Path(r"D:\SteamLibrary\steamapps\common\rocketleague"),
-    ):
-        _add(default_dir)
+    # 3. Epic LauncherInstalled.dat
+    installed_dat = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "Epic" / "UnrealEngineLauncher" / "LauncherInstalled.dat"
+    if installed_dat.exists():
+        try:
+            dat = json.loads(installed_dat.read_text(encoding="utf-8", errors="replace"))
+            for item in dat.get("InstallationList") or []:
+                app_name = str(item.get("AppName") or "").lower()
+                loc = str(item.get("InstallLocation") or "")
+                if loc and (app_name == "sugar" or "rocketleague" in loc.lower()):
+                    _add(Path(loc))
+        except Exception:
+            pass
+
+    # 4. Launch.log base directory & live process path
+    linfo = _parse_launch_log()
+    if linfo.get("last_launch_base_dir"):
+        _add(Path(linfo["last_launch_base_dir"]))
+    _add(_find_running_rl_dir())
+
+    # 5. Common multi-drive defaults
+    for drv in ("C", "D", "E", "F", "G"):
+        if not Path(f"{drv}:\\").exists():
+            continue
+        for rel in (
+            r"Program Files (x86)\Steam\steamapps\common\rocketleague",
+            r"Program Files\Steam\steamapps\common\rocketleague",
+            r"SteamLibrary\steamapps\common\rocketleague",
+            r"Steam\steamapps\common\rocketleague",
+            r"Program Files\Epic Games\rocketleague",
+            r"Program Files (x86)\Epic Games\rocketleague",
+            r"Games\EpicGames\rocketleague",
+            r"Games\rocketleague",
+            r"Epic Games\rocketleague",
+        ):
+            _add(Path(f"{drv}:\\{rel}"))
 
     return found
 
 
-def ensure_tastatsapi_ini() -> bool:
-    config_dir = find_rl_config_dir()
-    if not config_dir:
-        return False
-    ini_path = config_dir / "TAStatsAPI.ini"
-    needed = "[TAGame.MatchStatsExporter_TA]\nPort=49123\nPacketSendRate=30\n"
-    if ini_path.exists():
-        txt = ini_path.read_text(encoding="utf-8", errors="replace")
-        has_section = "[TAGame.MatchStatsExporter_TA]" in txt
-        has_rate = bool(re.search(r"^\s*PacketSendRate\s*=\s*[1-9]\d*", txt, re.MULTILINE))
-        has_port = bool(re.search(r"^\s*Port\s*=\s*49123", txt, re.MULTILINE))
-        if has_section and has_rate and has_port:
-            log("OK: TAStatsAPI.ini already correct")
-            return True
+def _set_readonly(p: Path, readonly: bool) -> None:
     try:
-        ini_path.write_text(needed, encoding="utf-8")
-        log("OK: TAStatsAPI.ini created/updated with [TAGame.MatchStatsExporter_TA]")
-        return True
-    except Exception as e:
-        log(f"ERROR: Failed to write TAStatsAPI.ini: {e}")
-        return False
+        os.chmod(p, stat.S_IREAD if readonly else (stat.S_IWRITE | stat.S_IREAD))
+    except Exception:
+        pass
+
+
+def ensure_tastatsapi_ini() -> bool:
+    """Create/repair TAStatsAPI.ini across discovered Documents folders and protect Read-Only."""
+    dirs = find_rl_config_dirs()
+    if not dirs:
+        docs = _windows_documents_dir() or (Path.home() / "Documents")
+        target = docs / "My Games" / "Rocket League" / "TAGame" / "Config"
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            dirs = [target]
+        except Exception as e:
+            log(f"ERROR: Could not create RL Config folder {target}: {e}")
+            return False
+
+    needed = "[TAGame.MatchStatsExporter_TA]\nPort=49123\nWebPort=49124\nPacketSendRate=30\n"
+    ok_any = False
+    for config_dir in dirs:
+        ini_path = config_dir / "TAStatsAPI.ini"
+        if ini_path.exists():
+            txt = ini_path.read_text(encoding="utf-8", errors="replace")
+            has_section = "[TAGame.MatchStatsExporter_TA]" in txt
+            has_rate = bool(re.search(r"^\s*PacketSendRate\s*=\s*[1-9]\d*", txt, re.MULTILINE))
+            has_port = bool(re.search(r"^\s*Port\s*=\s*49123\b", txt, re.MULTILINE))
+            web_eq_port = bool(re.search(r"^\s*WebPort\s*=\s*49123\b", txt, re.MULTILINE))
+            if has_section and has_rate and has_port and not web_eq_port:
+                _set_readonly(ini_path, True)
+                log(f"OK: TAStatsAPI.ini verified & read-only at {ini_path}")
+                ok_any = True
+                continue
+        try:
+            if ini_path.exists():
+                _set_readonly(ini_path, False)
+            ini_path.write_text(needed, encoding="utf-8")
+            _set_readonly(ini_path, True)
+            log(f"OK: TAStatsAPI.ini created/repaired & protected at {ini_path}")
+            ok_any = True
+        except Exception as e:
+            log(f"ERROR: Failed to write {ini_path}: {e}")
+    return ok_any
 
 
 def ensure_default_statsapi_ini() -> bool:
-    """Fix Epic/Steam install-dir DefaultStatsAPI.ini if PacketSendRate=0 overrides Documents INI."""
+    """Fix Steam/Epic install-dir DefaultStatsAPI.ini if PacketSendRate=0."""
     fixed_any = False
     for rl_path in find_rl_install_dirs():
         ini = rl_path / "TAGame" / "Config" / "DefaultStatsAPI.ini"
@@ -229,15 +552,16 @@ def ensure_default_statsapi_ini() -> bool:
             continue
         try:
             content = ini.read_text(encoding="utf-8", errors="replace")
-            updated = content
-            if "PacketSendRate=0" in updated:
-                updated = updated.replace("PacketSendRate=0", "PacketSendRate=30")
+            updated = re.sub(r"(?im)^(\s*PacketSendRate\s*=\s*)0(?:\.0+)?\b", r"\g<1>30", content)
             if "[TAGame.MatchStatsExporter_TA]" not in updated:
-                updated = updated.rstrip() + "\n\n[TAGame.MatchStatsExporter_TA]\nPort=49123\nPacketSendRate=30\n"
+                updated = updated.rstrip() + "\n\n[TAGame.MatchStatsExporter_TA]\nPort=49123\nWebPort=49124\nPacketSendRate=30\n"
             if updated != content:
+                _set_readonly(ini, False)
                 ini.write_text(updated, encoding="utf-8")
                 log(f"OK: DefaultStatsAPI.ini fixed at {ini}")
                 fixed_any = True
+        except PermissionError as e:
+            log(f"INFO: Could not write {ini} (permissions — user TAStatsAPI.ini will override): {e}")
         except Exception as e:
             log(f"WARN: Could not update {ini}: {e}")
     return fixed_any
@@ -258,18 +582,24 @@ def _probe_port_open(host: str = "127.0.0.1", port: int = 49123, timeout: float 
 
 
 def diagnose_rl_ini() -> Dict[str, Any]:
-    cd = find_rl_config_dir()
+    dirs = find_rl_config_dirs()
+    cd = dirs[0] if dirs else None
+    linfo = _parse_launch_log(dirs)
     res: Dict[str, Any] = {
         "config_dir_found": cd is not None,
         "config_dir": str(cd) if cd else None,
+        "config_dirs": [str(d) for d in dirs],
         "ini_path": str(cd / "TAStatsAPI.ini") if cd else None,
         "ini_exists": False,
         "ini_correct": False,
+        "ini_read_only": False,
         "ini_read_by_rl": False,
         "ini_preview": "",
         "install_dirs": [str(p) for p in find_rl_install_dirs()],
         "default_ini_issues": [],
         "port_49123_open": _probe_port_open("127.0.0.1", 49123, 0.15),
+        "rl_running": is_rl_process_running(),
+        **linfo,
     }
     if cd:
         ip = cd / "TAStatsAPI.ini"
@@ -279,15 +609,20 @@ def diagnose_rl_ini() -> Dict[str, Any]:
             res["ini_preview"] = txt.strip()[:500]
             has_section = "[TAGame.MatchStatsExporter_TA]" in txt
             has_rate = bool(re.search(r"^\s*PacketSendRate\s*=\s*[1-9]\d*", txt, re.MULTILINE))
-            res["ini_correct"] = has_section and has_rate
+            has_port = bool(re.search(r"^\s*Port\s*=\s*49123\b", txt, re.MULTILINE))
+            res["ini_correct"] = has_section and has_rate and has_port
             res["ini_read_by_rl"] = "[IniVersion]" in txt
+            try:
+                res["ini_read_only"] = not os.access(ip, os.W_OK)
+            except Exception:
+                res["ini_read_only"] = False
 
     for rl_path_str in res["install_dirs"]:
         ini = Path(rl_path_str) / "TAGame" / "Config" / "DefaultStatsAPI.ini"
         if ini.exists():
             try:
                 txt = ini.read_text(encoding="utf-8", errors="replace")
-                if "PacketSendRate=0" in txt or "[TAGame.MatchStatsExporter_TA]" not in txt:
+                if re.search(r"(?im)^\s*PacketSendRate\s*=\s*0(?:\.0+)?\b", txt) or "[TAGame.MatchStatsExporter_TA]" not in txt:
                     res["default_ini_issues"].append(str(ini))
             except Exception:
                 pass
@@ -1771,6 +2106,9 @@ def run_listener(player: str, friends: list, stop_event) -> None:
 
     reconnect_delay = 3
     decoder = json.JSONDecoder()
+    last_rl_proc_check = 0.0
+    rl_running = False
+    auto_repaired_on_rl = False
 
     while not stop_event.is_set():
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1782,6 +2120,9 @@ def run_listener(player: str, friends: list, stop_event) -> None:
             sock.settimeout(0)  # Non-blocking for recv()
 
             log("Connected to Rocket League Stats API!")
+            rl_running = True
+            auto_repaired_on_rl = False
+            _update_live_fields(rl_running=True)
             update_status("connected", "Live - waiting for match", player, friends, tracking_scope=state.tracking_cfg["scope"])
             state._connected = True
             state.publish_live(force=True)
@@ -1979,10 +2320,26 @@ def run_listener(player: str, friends: list, stop_event) -> None:
             state.publish_live(force=True)
 
         except (ConnectionRefusedError, socket.timeout):
-            update_status("disconnected", "RL not running", player, friends, tracking_scope=state.tracking_cfg["scope"])
+            now_dc = time.time()
+            if (now_dc - last_rl_proc_check) >= 10.0:
+                last_rl_proc_check = now_dc
+                rl_running = is_rl_process_running()
+                _update_live_fields(rl_running=rl_running)
+                if rl_running and not auto_repaired_on_rl:
+                    auto_repaired_on_rl = True
+                    ensure_tastatsapi_ini()
+                    ensure_default_statsapi_ini()
+                elif not rl_running:
+                    auto_repaired_on_rl = False
+            msg_dc = (
+                "Rocket League is running, but Stats API port 49123 is closed — restart Rocket League once"
+                if rl_running
+                else "RL not running"
+            )
+            update_status("disconnected", msg_dc, player, friends, tracking_scope=state.tracking_cfg["scope"])
             state.reset()
             state.publish_live(force=True)
-            log(f"RL not available - retrying in {reconnect_delay}s...")
+            log(f"RL not available ({'RL running, port closed' if rl_running else 'not running'}) - retrying in {reconnect_delay}s...")
         except Exception as e:
             log(f"Error: {e}")
 
@@ -2005,9 +2362,14 @@ def run_listener(player: str, friends: list, stop_event) -> None:
         else:
             state._poll_interval = 60
         poll_mode = "hot" if state._poll_interval == 2 else "warm" if state._poll_interval == 15 else "cold"
+        dc_msg = (
+            "Restart Rocket League once (Stats API port 49123 closed)"
+            if (not state._connected and rl_running)
+            else ("RL not running (port 49123 closed)" if not state._connected else f"Polling ({poll_mode})")
+        )
         update_status(
             "disconnected" if not state._connected else "connected",
-            "RL not running (port 49123 closed)" if not state._connected else f"Polling ({poll_mode})",
+            dc_msg,
             player,
             friends,
             poll_interval=state._poll_interval,

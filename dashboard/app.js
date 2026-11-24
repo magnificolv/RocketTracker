@@ -227,6 +227,25 @@ function renderLiveHud(s) {
 
   if (!s.in_match) {
     const conn = s.connection_state === 'connected';
+    const rlWaitRestart = !conn && s.connection_state === 'disconnected' && Boolean(s.rl_running);
+    if (rlWaitRestart) {
+      root.innerHTML = `<div class="live-hud hud-ignored">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px">
+            ${packIcon('lightning', 'pack-ico-lg')}
+            <div>
+              <strong style="font-size:.92rem;color:var(--orange)">Rocket League is running, but Stats API (port 49123) is closed</strong>
+              <div class="hint-text">Click Fix RL Config below, then <b>fully restart Rocket League once</b> so Steam/Epic loads TAStatsAPI.ini.</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-primary btn-sm" onclick="createRlConfig()">Fix RL Config</button>
+            <button class="btn btn-ghost btn-sm" onclick="openSettings('diagnostics')">Diagnostics</button>
+          </div>
+        </div>
+      </div>`;
+      return;
+    }
     const setupMsg = s.connection_state === 'no_player'
       ? 'Set your Rocket League nickname in Settings to start live tracking.'
       : (conn ? 'Connected to Rocket League — waiting for next competitive match.' : 'Launch Rocket League to stream live match telemetry.');
@@ -329,7 +348,8 @@ function updateListenerBarFromLive(s) {
       set('dot-off', 'state-off', 'Set RL name in Settings', 'SETUP');
       break;
     case 'disconnected':
-      set('dot-off', 'state-off', 'RL not running (port 49123)', 'OFF');
+      if (s.rl_running) set('dot-connecting', 'state-connecting', 'Restart RL for Stats API', 'RESTART RL');
+      else set('dot-off', 'state-off', 'RL not running (port 49123)', 'OFF');
       break;
     default:
       set('dot-off', 'state-off', s.message || s.connection_state || 'Idle', '—');
@@ -1166,6 +1186,7 @@ async function loadDiagnostics() {
   try {
     const d = await api('/api/diagnostics');
     const ini = d.ini || {};
+    const roBadge = ini.ini_read_only ? ' · Protected (Read-Only)' : ' · Writable';
     if (!ini.config_dir_found) {
       b.textContent = 'Not Found';
       b.className = 'tag warn';
@@ -1179,17 +1200,30 @@ async function loadDiagnostics() {
       b.className = 'tag warn';
       m.textContent = 'TAStatsAPI.ini missing [TAGame.MatchStatsExporter_TA] or PacketSendRate=30 — click Auto-Create / Repair.';
     } else {
-      b.textContent = ini.port_49123_open ? 'PORT OPEN' : 'INI OK';
-      b.className = 'tag live';
-      m.textContent = ini.ini_read_by_rl
-        ? (ini.port_49123_open ? 'INI verified by RL and port 49123 is live!' : 'INI verified by RL. Launch Rocket League to open port 49123.')
-        : 'INI written correctly — restart Rocket League once so RL reads it.';
+      b.textContent = ini.port_49123_open ? 'PORT OPEN' : (ini.rl_running ? 'RESTART RL' : 'INI OK');
+      b.className = ini.port_49123_open ? 'tag live' : (ini.rl_running ? 'tag warn' : 'tag live');
+      m.textContent = ini.port_49123_open
+        ? `Port 49123 is live!${roBadge}`
+        : (ini.rl_running
+            ? `Rocket League is running with port 49123 closed — restart Rocket League once.${roBadge}`
+            : (ini.ini_read_by_rl
+                ? `INI verified by RL${roBadge}. Launch Rocket League to open port 49123.`
+                : `INI written & protected${roBadge} — launch/restart Rocket League once.`));
     }
     const dbInfo = d.db || {};
-    let ex = `DB: ${dbInfo.total_matches || 0} matches across ${dbInfo.total_sessions || 0} sessions`;
-    if (dbInfo.non_competitive_count > 0) ex += ` (${dbInfo.non_competitive_count} non-competitive legacy rows detected)`;
-    if ((ini.default_ini_issues || []).length) ex += ` · Warning: DefaultStatsAPI.ini issue in ${ini.default_ini_issues[0]}`;
-    extra.textContent = ex;
+    const lines = [];
+    const client = ini.last_launch_client || 'Unknown';
+    const launchStats = ini.last_launch_statsapi
+      ? `${ini.last_launch_statsapi}`
+      : (ini.last_launch_base_dir ? 'Not enabled in last launch' : 'No Launch.log found');
+    lines.push(`Last RL launch: ${client} · ${launchStats}`);
+    if (ini.ini_path) lines.push(`User INI: ${ini.ini_path}`);
+    if ((ini.install_dirs || []).length) lines.push(`Detected installs: ${ini.install_dirs.join(' | ')}`);
+    let dbLine = `DB: ${dbInfo.total_matches || 0} matches across ${dbInfo.total_sessions || 0} sessions`;
+    if (dbInfo.non_competitive_count > 0) dbLine += ` (${dbInfo.non_competitive_count} non-competitive legacy rows detected)`;
+    lines.push(dbLine);
+    if ((ini.default_ini_issues || []).length) lines.push(`DefaultStatsAPI.ini still 0 in: ${ini.default_ini_issues.join(', ')} (user Read-Only TAStatsAPI.ini overrides it)`);
+    extra.innerHTML = lines.map(l => `<div>${esc(l)}</div>`).join('');
     logBox.textContent = (d.log_tail || []).join('\n') || '(listener.log is empty)';
   } catch (e) {
     b.textContent = 'Error';

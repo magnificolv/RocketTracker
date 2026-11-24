@@ -1232,24 +1232,21 @@ def update_tracker():
 
 @app.route("/api/rl-config", methods=["GET"])
 def rl_config_status():
-    diag = diagnose_rl_ini()
-    return jsonify(
-        {
-            "config_dir_found": diag["config_dir_found"],
-            "ini_exists": diag["ini_exists"],
-            "ini_correct": diag["ini_correct"],
-            "ini_read_by_rl": diag["ini_read_by_rl"],
-            "port_49123_open": diag["port_49123_open"],
-            "default_ini_issues": diag["default_ini_issues"],
-        }
-    )
+    return jsonify(diagnose_rl_ini())
 
 
 @app.route("/api/rl-config", methods=["POST"])
 def rl_config_create():
     ok = ensure_tastatsapi_ini()
-    ensure_default_statsapi_ini()
-    return jsonify({"created": ok, "message": "TAStatsAPI.ini created/updated" if ok else "Could not find RL Config directory"})
+    def_ok = ensure_default_statsapi_ini()
+    return jsonify(
+        {
+            "created": ok,
+            "default_ini_updated": def_ok,
+            "message": "TAStatsAPI.ini created/protected — restart Rocket League once" if ok else "Could not find RL Config directory",
+            "diag": diagnose_rl_ini(),
+        }
+    )
 
 
 @app.route("/api/quit", methods=["POST"])

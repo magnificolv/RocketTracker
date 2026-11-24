@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import sqlite3
+import stat
 import sys
 import tempfile
 import unittest
@@ -136,7 +137,7 @@ def _player(
 
 class TestResultLogic(unittest.TestCase):
     def test_version_constants(self):
-        self.assertEqual(APP_VERSION, "4.0.0")
+        self.assertEqual(APP_VERSION, "4.0.1")
         self.assertEqual(APP_EDITION, "Overdrive")
 
     def test_classify_match_competitive_vs_practice_vs_casual(self):
@@ -210,6 +211,11 @@ class TestListenerAndEndToEnd(unittest.TestCase):
         self.db_path = _setup_isolated_db(self.tmp)
 
     def tearDown(self):
+        for p in self.tmp.rglob("*"):
+            try:
+                os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+            except Exception:
+                pass
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _run_3_lock_ticks(self, st, guid="G-1", pid=11, friend=False, team0_base=0, team1_base=0):
@@ -335,22 +341,78 @@ class TestListenerAndEndToEnd(unittest.TestCase):
         self.assertEqual(st.user_team_num, 1)
         self.assertEqual(st.player_name, "magnificox")
 
-    def test_ensure_tastatsapi_ini_repairs_broken_section(self):
+    def test_ensure_tastatsapi_ini_repairs_broken_section_and_sets_readonly(self):
         cfg_dir = self.tmp / "RLConfig"
         cfg_dir.mkdir(parents=True, exist_ok=True)
         ini_path = cfg_dir / "TAStatsAPI.ini"
         ini_path.write_text("[System]\nPacketSendRate=30\n", encoding="utf-8")
-        orig_find = listener_mod.find_rl_config_dir
+        os.chmod(ini_path, stat.S_IREAD)  # Already Read-Only broken file!
+        orig_find = listener_mod.find_rl_config_dirs
         try:
-            listener_mod.find_rl_config_dir = lambda: cfg_dir
+            listener_mod.find_rl_config_dirs = lambda: [cfg_dir]
             self.assertTrue(listener_mod.ensure_tastatsapi_ini())
             txt = ini_path.read_text(encoding="utf-8")
             self.assertIn("[TAGame.MatchStatsExporter_TA]", txt)
             self.assertIn("Port=49123", txt)
+            self.assertIn("WebPort=49124", txt)
             self.assertIn("PacketSendRate=30", txt)
             self.assertNotIn("[System]", txt)
+            self.assertFalse(os.access(ini_path, os.W_OK))
         finally:
-            listener_mod.find_rl_config_dir = orig_find
+            listener_mod.find_rl_config_dirs = orig_find
+
+    def test_steam_libraryfolders_vdf_and_acf_parsing(self):
+        steam_root = self.tmp / "SteamRoot"
+        lib_e = self.tmp / "DriveE" / "SteamLibrary"
+        (steam_root / "steamapps").mkdir(parents=True, exist_ok=True)
+        rl_common = lib_e / "steamapps" / "common" / "rocketleague"
+        rl_common.mkdir(parents=True, exist_ok=True)
+        escaped_e = str(lib_e).replace("\\", "\\\\")
+        (steam_root / "steamapps" / "libraryfolders.vdf").write_text(
+            f'"libraryfolders"\n{{\n\t"0"\n\t{{\n\t\t"path"\t\t"{escaped_e}"\n\t}}\n}}\n',
+            encoding="utf-8",
+        )
+        (lib_e / "steamapps" / "appmanifest_252950.acf").write_text(
+            '"AppState"\n{\n\t"appid"\t\t"252950"\n\t"installdir"\t\t"rocketleague"\n}\n',
+            encoding="utf-8",
+        )
+        found = listener_mod._find_steam_rl_dirs(extra_steam_roots=[steam_root])
+        self.assertIn(rl_common.resolve(), [p.resolve() for p in found])
+
+    def test_ensure_default_statsapi_ini_replaces_zero_variants(self):
+        rl_dir = self.tmp / "SteamRL"
+        cfg = rl_dir / "TAGame" / "Config"
+        cfg.mkdir(parents=True, exist_ok=True)
+        ini = cfg / "DefaultStatsAPI.ini"
+        ini.write_text(
+            "[TAGame.MatchStatsExporter_TA]\nPort=49123\nWebPort=49124\nPacketSendRate = 0.0\n",
+            encoding="utf-8",
+        )
+        orig = listener_mod.find_rl_install_dirs
+        try:
+            listener_mod.find_rl_install_dirs = lambda: [rl_dir]
+            self.assertTrue(listener_mod.ensure_default_statsapi_ini())
+            txt = ini.read_text(encoding="utf-8")
+            self.assertIn("PacketSendRate = 30", txt)
+            self.assertNotIn("0.0", txt)
+        finally:
+            listener_mod.find_rl_install_dirs = orig
+
+    def test_parse_launch_log_steam_and_epic(self):
+        cfg_dir = self.tmp / "MyGames" / "Rocket League" / "TAGame" / "Config"
+        logs_dir = cfg_dir.parent / "Logs"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        (logs_dir / "Launch.log").write_text(
+            "Init: Base directory: E:\\SteamLibrary\\steamapps\\common\\rocketleague\\Binaries\\Win64\\\n"
+            "[0022.10] StatsAPI: PacketSendRate=(30.0000) Port=(49123) WebPort=(49124)\n",
+            encoding="utf-8",
+        )
+        parsed = listener_mod._parse_launch_log([cfg_dir])
+        self.assertEqual(parsed["last_launch_client"], "Steam")
+        self.assertEqual(parsed["last_launch_base_dir"], r"E:\SteamLibrary\steamapps\common\rocketleague")
+        self.assertEqual(parsed["last_launch_rate"], 30.0)
+        self.assertEqual(parsed["last_launch_port"], 49123)
 
     def test_flask_api_and_maintenance_and_card(self):
         # Seed a competitive match + a legacy casual match
@@ -368,7 +430,7 @@ class TestListenerAndEndToEnd(unittest.TestCase):
         conn.close()
 
         client = app_mod.app.test_client()
-        self.assertEqual(client.get("/api/status").get_json()["version"], "4.0.0")
+        self.assertEqual(client.get("/api/status").get_json()["version"], "4.0.1")
         self.assertIn("in_match", client.get("/api/live").get_json())
 
         # Analytics & Coach
