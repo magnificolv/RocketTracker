@@ -51,6 +51,8 @@ STATUS_PATH = BASE_DIR / "listener_status.json"
 _coach = CoachEngine(str(DB_PATH))
 
 UU_TO_KPH = 0.036
+# ~3 seconds of consecutive live-play UpdateState ticks (PacketSendRate=30)
+SPECTATOR_CONFIRM_TICKS = 90
 
 # Fast buffered logger (never flushes disk inside recv() loop)
 _log_queue: List[str] = []
@@ -1464,22 +1466,41 @@ class MatchState:
             except (TypeError, ValueError):
                 pass
 
-        # Spectator vs player detection (bHasCar/Boost/Speed on BOTH teams = Replay/Spectator!)
+        # Spectator vs player detection.
+        # SPECTATOR fields (bHasCar/Boost/Speed) are normally only sent for the local player's own team,
+        # but RL ALSO sends them for BOTH teams during goal replays, kickoff camera and the end-of-match
+        # podium. v4.0.0/v4.0.1 counted those ticks and wrongly flagged real ranked matches as "replay"
+        # (match skipped). Only treat it as spectating when both-team telemetry persists during LIVE play
+        # AND the configured user is not on the pitch at all.
         spec_teams = {
             p.get("TeamNum")
             for p in players
             if p.get("TeamNum") in (0, 1) and any(k in p for k in ("bHasCar", "Boost", "Speed"))
         }
-        if len(spec_teams) >= 2:
-            self._both_teams_spec_ticks += 1
-            if self._both_teams_spec_ticks >= 5 and not self.is_spectator_or_replay:
-                self.is_spectator_or_replay = True
-                log("Detected SPECTATOR/REPLAY (telemetry present on both teams) — match will be ignored")
-        else:
-            self._both_teams_spec_ticks = 0
+        live_tick = (
+            (not self.in_replay)
+            and (not self.paused)
+            and (self.pending_end_at is None)
+            and not game.get("bHasWinner")
+        )
+        user_on_pitch = bool(players) and self._fast_find(players) is not None
+        if live_tick:
+            if len(spec_teams) >= 2 and not user_on_pitch:
+                self._both_teams_spec_ticks += 1
+                if self._both_teams_spec_ticks >= SPECTATOR_CONFIRM_TICKS and not self.is_spectator_or_replay:
+                    self.is_spectator_or_replay = True
+                    log(
+                        "Detected SPECTATOR (both-team telemetry during live play, user not in roster: "
+                        f"{self._roster_summary(players)}) — match will be ignored"
+                    )
+            else:
+                self._both_teams_spec_ticks = 0
+                if self.is_spectator_or_replay and user_on_pitch:
+                    self.is_spectator_or_replay = False
+                    log("Spectator flag cleared — configured user is playing in this match")
 
-        # Team detection
-        if self.user_team_num is None and players and not self.is_spectator_or_replay:
+        # Team detection (never from replay/podium ticks where both teams carry telemetry)
+        if self.user_team_num is None and players and not self.is_spectator_or_replay and live_tick:
             if len(spec_teams) == 1:
                 candidate = next(iter(spec_teams))
                 if candidate == self._team_confirm_candidate:
@@ -1763,6 +1784,20 @@ class MatchState:
         if post_kph >= 55.0:
             self.user_hit_kphs.append(post_kph)
 
+    def _finish_skipped(self) -> None:
+        """End a match without recording it, but remember its MatchGuid.
+
+        Without remembering the GUID, the trailing podium/scoreboard UpdateState ticks of the SAME match
+        were treated as a brand-new match after reset(): the HUD showed a phantom "RECORDING MATCH" with
+        a broken score (e.g. 5-0 instead of 5-2, because Teams-score baseline restarted at the final score
+        and players who had left no longer contributed their goals).
+        """
+        self._match_recorded = True
+        if self.match_guid:
+            self._last_recorded_guid = self.match_guid
+        self.reset()
+        self.publish_live(force=True)
+
     def finalize_match(self, match_ended_winner: Any = None, source: str = "MatchEnded") -> Optional[int]:
         """Classify, reconcile scores, decide W/L, and persist to SQLite if allowed."""
         if self._match_recorded:
@@ -1770,17 +1805,17 @@ class MatchState:
 
         cls = self._current_classification()
         if not cls["should_record"]:
-            log(f"SKIPPED ({cls['category']}): {cls['reason']}")
-            self._match_recorded = True
-            self.reset()
-            self.publish_live(force=True)
+            s0, s1 = self._reconcile_live_scores()
+            log(
+                f"SKIPPED ({cls['category']}): {cls['reason']} | playlist={cls['label']}({self.playlist_id}) "
+                f"raw={s0}-{s1} team={self.user_team_num} guid={self.match_guid or '-'}"
+            )
+            self._finish_skipped()
             return None
 
         if self.user_team_num not in (0, 1):
             log(f"SKIPPED ({source}): user_team_num unresolved")
-            self._match_recorded = True
-            self.reset()
-            self.publish_live(force=True)
+            self._finish_skipped()
             return None
 
         s0, s1 = self._reconcile_live_scores()
@@ -1796,9 +1831,7 @@ class MatchState:
 
         if result == "no_contest":
             log(f"SKIPPED ({source}): No-Contest (WinnerTeamNum=-1)")
-            self._match_recorded = True
-            self.reset()
-            self.publish_live(force=True)
+            self._finish_skipped()
             return None
 
         us = s0 if self.user_team_num == 0 else s1
@@ -1806,9 +1839,7 @@ class MatchState:
 
         if result == "draw" and us == 0 and opp == 0:
             log(f"SKIPPED ({source}): empty 0-0 draw")
-            self._match_recorded = True
-            self.reset()
-            self.publish_live(force=True)
+            self._finish_skipped()
             return None
 
         if is_ff:
@@ -2175,6 +2206,15 @@ def run_listener(player: str, friends: list, stop_event) -> None:
                         event = obj.get("Event", "")
                         event_count += 1
                         raw_data = obj.get("Data")
+                        # RL sends Data either as an object or as a JSON-encoded string depending on
+                        # build/client — normalise once so every event handler sees a dict.
+                        if isinstance(raw_data, str):
+                            try:
+                                raw_data = json.loads(raw_data)
+                            except (json.JSONDecodeError, ValueError):
+                                raw_data = {}
+                        if not isinstance(raw_data, dict):
+                            raw_data = {}
 
                         if event == "UpdateState":
                             data = json.loads(raw_data) if isinstance(raw_data, str) else (raw_data or {})

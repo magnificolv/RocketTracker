@@ -137,7 +137,7 @@ def _player(
 
 class TestResultLogic(unittest.TestCase):
     def test_version_constants(self):
-        self.assertEqual(APP_VERSION, "4.0.1")
+        self.assertEqual(APP_VERSION, "4.0.2")
         self.assertEqual(APP_EDITION, "Overdrive")
 
     def test_classify_match_competitive_vs_practice_vs_casual(self):
@@ -295,7 +295,7 @@ class TestListenerAndEndToEnd(unittest.TestCase):
         # 3) Spectator / Replay (bHasCar on BOTH teams 0 and 1)
         st._match_recorded = False
         both_spec = [_player("P1", 0, spec=True), _player("P2", 1, spec=True)]
-        for _ in range(6):
+        for _ in range(listener_mod.SPECTATOR_CONFIRM_TICKS + 2):
             st.handle_update_state(_tick_payload(guid="REPLAY-1", playlist_id=11, players=both_spec))
         self.assertTrue(st.is_spectator_or_replay)
         self.assertIsNone(st.finalize_match(match_ended_winner=0, source="MatchEnded"))
@@ -327,6 +327,81 @@ class TestListenerAndEndToEnd(unittest.TestCase):
         m = dict(conn.execute("SELECT * FROM matches WHERE id=?", (mid,)).fetchone())
         conn.close()
         self.assertEqual((m["user_score"], m["opponent_score"], m["result"]), (0, 1, "loss"))
+
+    def test_goal_replay_telemetry_does_not_skip_ranked_match_and_no_phantom(self):
+        """Regression (v4.0.2): real Ranked 3v3 5-2 WIN was skipped as 'replay' and re-appeared as 5-0 phantom."""
+        st = listener_mod.MatchState("Magnificox", ["Deglisthedk", "InsulinLV._"], aliases=["MagnificoLV"])
+        guid = "RANKED3-REAL"
+
+        def roster(blue_goals, orange_goals, all_spec, blue_scorer_left=False):
+            blue = [_player("HVK_Mat80", 0, spec=all_spec, goals=0)]
+            if not blue_scorer_left:
+                blue.append(_player("BlueScorer", 0, spec=all_spec, goals=blue_goals))
+            blue.append(_player("BsM-HQZ", 0, spec=all_spec, goals=0))
+            orange = [
+                _player("MagnificoX", 1, spec=True, goals=3, score=543, shots=4, assists=1),
+                _player("Insulin", 1, spec=True, goals=max(0, orange_goals - 3)),
+                _player("Deglisthedk", 1, spec=True, goals=0),
+            ]
+            return blue + orange
+
+        def teams(b, o):
+            return [{"TeamNum": 0, "Name": "Blue", "Score": b}, {"TeamNum": 1, "Name": "Orange", "Score": o}]
+
+        # Kickoff: only own (orange) team carries SPECTATOR fields -> lock Orange
+        for _ in range(4):
+            st.handle_update_state(_tick_payload(guid=guid, playlist_id=13, time_sec=300, teams=teams(0, 0), players=roster(0, 0, False)))
+        self.assertEqual(st.user_team_num, 1)
+
+        # Goal replays: RL sends telemetry for BOTH teams for many seconds -> must NOT flag spectator
+        score_b, score_o = 0, 0
+        for scorer_team in (1, 0, 1, 1, 0, 1, 1):
+            if scorer_team == 1:
+                score_o += 1
+                st.handle_goal_scored({"Scorer": {"Name": "MagnificoX" if score_o <= 3 else "Insulin", "TeamNum": 1}, "GoalSpeed": 90.0 + score_o})
+            else:
+                score_b += 1
+                st.handle_goal_scored({"Scorer": {"Name": "BlueScorer", "TeamNum": 0}, "GoalSpeed": 80.0 + score_b})
+            for _ in range(listener_mod.SPECTATOR_CONFIRM_TICKS * 3):
+                st.handle_update_state(_tick_payload(guid=guid, playlist_id=13, time_sec=200, replay=True, teams=teams(score_b, score_o), players=roster(score_b, score_o, True)))
+            for _ in range(10):
+                st.handle_update_state(_tick_payload(guid=guid, playlist_id=13, time_sec=150, teams=teams(score_b, score_o), players=roster(score_b, score_o, False)))
+        self.assertFalse(st.is_spectator_or_replay)
+
+        # Even live both-team telemetry while the user is on the pitch is never "spectating"
+        for _ in range(listener_mod.SPECTATOR_CONFIRM_TICKS * 2):
+            st.handle_update_state(_tick_payload(guid=guid, playlist_id=13, time_sec=20, teams=teams(score_b, score_o), players=roster(score_b, score_o, True)))
+        self.assertFalse(st.is_spectator_or_replay)
+
+        # Blue scorer leaves before the end; podium shows both teams' telemetry
+        st.handle_update_state(_tick_payload(guid=guid, playlist_id=13, time_sec=0, has_winner=True, winner="Orange", teams=teams(2, 5), players=roster(2, 5, True, blue_scorer_left=True)))
+        mid = st.finalize_match(match_ended_winner=1, source="MatchEnded")
+        self.assertIsNotNone(mid)
+
+        conn = listener_mod.get_db()
+        m = dict(conn.execute("SELECT * FROM matches WHERE id=?", (mid,)).fetchone())
+        conn.close()
+        self.assertEqual((m["user_score"], m["opponent_score"], m["result"], m["playlist"]), (5, 2, "win", "Ranked 3v3"))
+
+        # Trailing podium/scoreboard ticks of the SAME match must not start a phantom live match
+        for _ in range(20):
+            st.handle_update_state(_tick_payload(guid=guid, playlist_id=13, time_sec=0, replay=True, teams=teams(2, 5), players=roster(2, 5, True, blue_scorer_left=True)))
+        self.assertIsNone(st.user_team_num)
+        self.assertEqual(st.tick_count, 0)
+
+    def test_skipped_match_trailing_ticks_do_not_create_phantom(self):
+        st = listener_mod.MatchState("MagnificoLV", [])
+        self._run_3_lock_ticks(st, guid="CASUAL-PH", pid=2)
+        self.assertIsNone(st.finalize_match(match_ended_winner=0, source="MatchEnded"))
+        players = [_player("MagnificoLV", 0, spec=True, goals=3), _player("OppOne", 1, spec=False, goals=0)]
+        for _ in range(10):
+            st.handle_update_state(_tick_payload(guid="CASUAL-PH", playlist_id=2, teams=[{"TeamNum": 0, "Score": 3}, {"TeamNum": 1, "Score": 0}], players=players))
+        self.assertIsNone(st.user_team_num)
+        self.assertEqual(st.tick_count, 0)
+        # A NEW match guid starts tracking again
+        for _ in range(4):
+            st.handle_update_state(_tick_payload(guid="NEXT-1", playlist_id=11, players=players))
+        self.assertEqual(st.user_team_num, 0)
 
     def test_alt_account_spectator_lock(self):
         st = listener_mod.MatchState("WrongConfigName", [])
@@ -430,7 +505,7 @@ class TestListenerAndEndToEnd(unittest.TestCase):
         conn.close()
 
         client = app_mod.app.test_client()
-        self.assertEqual(client.get("/api/status").get_json()["version"], "4.0.1")
+        self.assertEqual(client.get("/api/status").get_json()["version"], "4.0.2")
         self.assertIn("in_match", client.get("/api/live").get_json())
 
         # Analytics & Coach

@@ -1,4 +1,4 @@
-# Rocket League Match Tracker v4.0.1 · Overdrive
+# Rocket League Match Tracker v4.0.2 · Overdrive
 
 <p align="center">
   <a href="https://github.com/magnificolv/RocketTracker/releases/latest"><img src="https://img.shields.io/github/v/release/magnificolv/RocketTracker?style=flat-square&label=version&color=00e5ff" alt="Version"></a>
@@ -33,7 +33,7 @@ A ground-up architectural and visual remake of Rocket League Match Tracker built
 
 1. **Download** the [latest ZIP](https://github.com/magnificolv/RocketTracker/releases/latest)
 2. **Extract** to your Desktop — keep the `RL-Tracker\` folder together (`data-v2.db` and `config.yaml` live next to the `.exe`)
-3. **Double-click** `RL-Tracker-v4.0.1.exe` — browser opens `http://localhost:3010`
+3. **Double-click** `RL-Tracker-v4.0.2.exe` — browser opens `http://localhost:3010`
 4. **Enter your Rocket League nickname** in Settings → **Auto-Create / Repair INI** → restart Rocket League once → queue Competitive!
 
 ---
@@ -53,6 +53,7 @@ A ground-up architectural and visual remake of Rocket League Match Tracker built
 
 | Version | Date | Highlights |
 |---|---|---|
+| **v4.0.2** | Nov 2026 | Fixed real Ranked matches being skipped as "Spectator/replay" (goal-replay & podium telemetry for both teams no longer counts; spectating requires live play + user absent from roster), fixed phantom post-match "RECORDING MATCH" with wrong score (e.g. 5-0 instead of 5-2) after a skipped match, and normalised string-encoded event `Data` payloads |
 | **v4.0.1** | Nov 2026 | Fixed Steam client "not connected": Steam `libraryfolders.vdf` + `appmanifest_252950.acf` discovery across drives, OneDrive / Windows Known Folder `Documents` discovery, Read-Only `TAStatsAPI.ini` (`Port=49123` + `WebPort=49124`) protection against UE3 overwrite, and live `RocketLeague.exe` / `Launch.log` diagnostics |
 | **v4.0.0** | Nov 2026 | Overdrive complete overhaul: Competitive-only filter, Freeplay/Replay rejection, authoritative `MatchEnded` W/L + OT/forfeit fix, Live HUD, Full Scoreboard & Goal Timeline, SVG Radar & Trend Charts, Win-vs-Loss diagnostics, Duo telemetry, Overdrive UI & Discord Card |
 | **v3.1.0** | Oct 12, 2026 | Fixed inverted W/L when `Winner` wasn't "Blue", ranked playlist IDs, accolades, replay goal filter |
